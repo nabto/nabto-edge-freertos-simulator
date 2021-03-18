@@ -1,7 +1,15 @@
 #include <stdio.h>
 
+// FreeRTOS includes
 #include <FreeRTOS.h>
 #include <task.h>
+
+// Nabto includes
+#include <nabto/nabto_device.h>
+#include <nabto/nabto_device_test.h>
+
+// Project includes
+#include "console.h"
 
 StackType_t uxTimerTaskStack[configTIMER_TASK_STACK_DEPTH];
 
@@ -9,16 +17,32 @@ void vTestTaskFunction(void *Parameters)
 {
     for (;;)
     {
-        printf("Hello FreeRTOS\n");
+        console_print("FreeRTOS Version %s\n", tskKERNEL_VERSION_NUMBER);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 
     vTaskDelete(NULL);
 }
 
+void TestNabtoTask(void *parameters)
+{
+    NabtoDeviceError ec = nabto_device_test_threads();
+    if (ec == NABTO_DEVICE_EC_OK)
+    {
+        console_print("Threads test passed\n");
+    }
+    else
+    {
+        console_print("Threads test failed\n");
+    }
+    vTaskDelete(NULL);
+
+}
+
 int main(void)
 {
-    xTaskCreate(vTestTaskFunction, "test",
+    console_init();
+    xTaskCreate(TestNabtoTask, "test",
                 configMINIMAL_STACK_SIZE, NULL,
                 configMAX_PRIORITIES-1, NULL);
     vTaskStartScheduler();

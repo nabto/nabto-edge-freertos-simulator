@@ -4,3 +4,6 @@
 [submodule "FreeRTOS/FreeRTOS-Plus-TCP"]
 	path = FreeRTOS/FreeRTOS-Plus-TCP
 	url = git@github.com:FreeRTOS/FreeRTOS-Plus-TCP.git
+[submodule "nabto-embedded-sdk"]
+	path = nabto-embedded-sdk
+	url = git@github.com:nabto/nabto-embedded-sdk.git
