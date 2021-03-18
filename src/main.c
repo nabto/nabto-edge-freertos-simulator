@@ -5,9 +5,23 @@
 
 StackType_t uxTimerTaskStack[configTIMER_TASK_STACK_DEPTH];
 
+void vTestTaskFunction(void *Parameters)
+{
+    for (;;)
+    {
+        printf("Hello FreeRTOS\n");
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+
+    vTaskDelete(NULL);
+}
+
 int main(void)
 {
-    printf("Hello FreeRTOS\n");
+    xTaskCreate(vTestTaskFunction, "test",
+                configMINIMAL_STACK_SIZE, NULL,
+                configMAX_PRIORITIES-1, NULL);
+    vTaskStartScheduler();
     return 0;
 }
 
