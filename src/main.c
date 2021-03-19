@@ -13,6 +13,13 @@
 
 StackType_t uxTimerTaskStack[configTIMER_TASK_STACK_DEPTH];
 
+static void log_callback(NabtoDeviceLogMessage *msg, void *data)
+{
+    console_print("%5s: %s\n",
+                  nabto_device_log_severity_as_string(msg->severity),
+                  msg->message);
+}
+
 void thread_test(void)
 {
     NabtoDeviceError ec = nabto_device_test_threads();
@@ -70,12 +77,24 @@ void future_test(void)
     nabto_device_test_free(device);
 }
 
+void logging_test(void)
+{
+    NabtoDevice *device = nabto_device_test_new();
+    nabto_device_set_log_level(device, "trace");
+    nabto_device_set_log_callback(device, log_callback, NULL);
+    nabto_device_test_logging(device);
+    nabto_device_set_log_level(device, "info");
+    console_print("Logging test passed if ERROR, WARN, INFO and TRACE logs were seen in output\n");
+    nabto_device_test_free(device);
+}
+
 void TestNabtoTask(void *parameters)
 {
     console_print("FreeRTOS Version %s\n", tskKERNEL_VERSION_NUMBER);
     thread_test();
     create_device_test();
     future_test();
+    logging_test();
     vTaskDelete(NULL);
 }
 
@@ -95,7 +114,6 @@ void vAssertCalled(const char *const pcFileName,
     (void)ulLine;
     (void)pcFileName;
 
-    static BaseType_t xPrinted = pdFALSE;
     volatile uint32_t ulSetToNonZeroInDebuggerToContinue = 0;
 
     taskENTER_CRITICAL();
