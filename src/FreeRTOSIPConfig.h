@@ -1,21 +1,23 @@
 #ifndef FREERTOS_IP_CONFIG_H
 #define FREERTOS_IP_CONFIG_H
 
+extern void console_print(const char *fmt, ...);
+
 /* Set to 1 to print out debug messages.  If ipconfigHAS_DEBUG_PRINTF is set to
 1 then FreeRTOS_debug_printf should be defined to the function used to print
 out the debugging messages. */
-#define ipconfigHAS_DEBUG_PRINTF	0
+#define ipconfigHAS_DEBUG_PRINTF	1
 #if( ipconfigHAS_DEBUG_PRINTF == 1 )
-	#define FreeRTOS_debug_printf(X)	vLoggingPrintf X
+	#define FreeRTOS_debug_printf(X)	console_print X
 #endif
 
 /* Set to 1 to print out non debugging messages, for example the output of the
 FreeRTOS_netstat() command, and ping replies.  If ipconfigHAS_PRINTF is set to 1
 then FreeRTOS_printf should be set to the function used to print out the
 messages. */
-#define ipconfigHAS_PRINTF			0
+#define ipconfigHAS_PRINTF			1
 #if( ipconfigHAS_PRINTF == 1 )
-	#define FreeRTOS_printf(X)			vLoggingPrintf X
+	#define FreeRTOS_printf(X)			console_print X
 #endif
 
 /* Define the byte order of the target MCU (the MCU FreeRTOS+TCP is executing
@@ -264,6 +266,6 @@ disconnecting stage will timeout after a period of non-activity. */
 
 #define portINLINE __inline
 
-
+#define ipconfigBUFFER_PADDING 14
 
 #endif // FREERTOS_IP_CONFIG_H

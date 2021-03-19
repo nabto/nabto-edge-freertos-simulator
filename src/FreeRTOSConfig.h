@@ -32,7 +32,7 @@ extern void vAssertCalled( const char * const pcFileName,  unsigned long ulLine 
 /* Memory allocation related definitions. */
 #define configSUPPORT_STATIC_ALLOCATION         1
 #define configSUPPORT_DYNAMIC_ALLOCATION        1
-#define configTOTAL_HEAP_SIZE                   ((size_t)(65*1024))
+#define configTOTAL_HEAP_SIZE                   ((size_t)(65*1024*1024))
 #define configAPPLICATION_ALLOCATED_HEAP        1
 
 /* Hook function related definitions. */

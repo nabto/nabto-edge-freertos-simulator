@@ -6,6 +6,8 @@
 #include <api/nabto_device_integration.h>
 #include <modules/event_queue/thread_event_queue.h>
 
+#include "common.h"
+
 struct platform_data
 {
     struct thread_event_queue event_queue;
@@ -54,6 +56,8 @@ void nabto_device_platform_stop_blocking(struct nabto_device_context *device)
 
 uint32_t freertos_now_ms(struct np_timestamp *obj)
 {
+    UNUSED(obj);
+
     TickType_t tick_count = xTaskGetTickCount();
     return tick_count / portTICK_PERIOD_MS;
 }
