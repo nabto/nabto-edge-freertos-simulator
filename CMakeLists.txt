@@ -32,6 +32,8 @@ set(SOURCE_FILES
 set(NABTO_SOURCE_FILES
     ${NABTO_DIR}/src/api_test/nabto_device_test_threads.c
     ${NABTO_DIR}/src/api/nabto_device_error.c
+    ${NABTO_DIR}/src/modules/event_queue/thread_event_queue.c
+    ${NABTO_DIR}/src/modules/event_queue/nm_event_queue.c
     ${ne_required_src}
     ${ne_api_test_src})
 

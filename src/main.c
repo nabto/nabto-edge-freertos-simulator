@@ -88,6 +88,38 @@ void logging_test(void)
     nabto_device_test_free(device);
 }
 
+void timestamp_test(void)
+{
+    console_print("Sleeping for 500ms for timestamp test...\n");
+    vTaskDelay(500 / portTICK_PERIOD_MS);
+    NabtoDevice *device = nabto_device_test_new();
+    uint32_t timestamp;
+    nabto_device_test_timestamp(device, &timestamp);
+    console_print("Timestamp in ms: %u\n", timestamp);
+    console_print("Test passed if timestamp is correct.\n");
+    nabto_device_test_free(device);
+}
+
+void event_queue_test(void)
+{
+    NabtoDevice *device = nabto_device_test_new();
+    NabtoDeviceFuture *future = nabto_device_future_new(device);
+    nabto_device_test_event_queue(device, future);
+
+    NabtoDeviceError ec = nabto_device_future_wait(future);
+    if (ec == NABTO_DEVICE_EC_OK)
+    {
+        console_print("Event queue test has passed\n");
+    }
+    else
+    {
+        console_print("Event queue test has failed\n");
+    }
+
+    nabto_device_future_free(future);
+    nabto_device_test_free(device);
+}
+
 void TestNabtoTask(void *parameters)
 {
     console_print("FreeRTOS Version %s\n", tskKERNEL_VERSION_NUMBER);
@@ -95,6 +127,8 @@ void TestNabtoTask(void *parameters)
     create_device_test();
     future_test();
     logging_test();
+    timestamp_test();
+    event_queue_test();
     vTaskDelete(NULL);
 }
 
