@@ -13,18 +13,7 @@
 
 StackType_t uxTimerTaskStack[configTIMER_TASK_STACK_DEPTH];
 
-void vTestTaskFunction(void *Parameters)
-{
-    for (;;)
-    {
-        console_print("FreeRTOS Version %s\n", tskKERNEL_VERSION_NUMBER);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-
-    vTaskDelete(NULL);
-}
-
-void TestNabtoTask(void *parameters)
+void thread_test(void)
 {
     NabtoDeviceError ec = nabto_device_test_threads();
     if (ec == NABTO_DEVICE_EC_OK)
@@ -35,8 +24,59 @@ void TestNabtoTask(void *parameters)
     {
         console_print("Threads test failed\n");
     }
-    vTaskDelete(NULL);
+}
 
+void create_device_test(void)
+{
+    NabtoDevice *device = nabto_device_test_new();
+    if (device != NULL)
+    {
+        console_print("Create device test passed\n");
+    }
+    else
+    {
+        console_print("Create device test failed\n");
+    }
+
+    nabto_device_test_free(device);
+}
+
+void future_test(void)
+{
+    NabtoDevice *device = nabto_device_test_new();
+    if (device == NULL)
+    {
+        console_print("Future test failed: device is NULL\n");
+    }
+
+    NabtoDeviceFuture *future = nabto_device_future_new(device);
+    if (future == NULL)
+    {
+        console_print("Future test failed: future is NULL\n");
+    }
+
+    nabto_device_test_future_resolve(device, future);
+    NabtoDeviceError ec = nabto_device_future_wait(future);
+
+    if (ec == NABTO_DEVICE_EC_OK)
+    {
+        console_print("Future resolve test has passed\n");
+    }
+    else
+    {
+        console_print("Future resolve test has failed.\n");
+    }
+
+    nabto_device_test_free(device);
+}
+
+void TestNabtoTask(void *parameters)
+{
+    console_print("FreeRTOS Version %s\n", tskKERNEL_VERSION_NUMBER);
+    thread_test();
+    create_device_test();
+    future_test();
+    vTaskDelete(NULL);
 }
 
 int main(void)

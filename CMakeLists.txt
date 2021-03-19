@@ -11,10 +11,13 @@ set(NABTO_DIR nabto-embedded-sdk)
 
 add_subdirectory(${NABTO_DIR})
 
+include(${NABTO_DIR}/nabto_primary_files.cmake)
+
 set(SOURCE_FILES
     src/main.c
     src/console.c
     src/nabto_device_threads_freertos.c
+    src/platform_integration.c
     ${KERNEL_DIR}/croutine.c
     ${KERNEL_DIR}/event_groups.c
     ${KERNEL_DIR}/list.c
@@ -28,7 +31,9 @@ set(SOURCE_FILES
 
 set(NABTO_SOURCE_FILES
     ${NABTO_DIR}/src/api_test/nabto_device_test_threads.c
-    ${NABTO_DIR}/src/api/nabto_device_error.c)
+    ${NABTO_DIR}/src/api/nabto_device_error.c
+    ${ne_required_src}
+    ${ne_api_test_src})
 
 
 set(EXE nabto_demo)
@@ -43,8 +48,10 @@ target_include_directories(${EXE} PUBLIC ${TCP_DIR}/include)
 target_include_directories(${EXE} PUBLIC ${TCP_DIR}/portable/Compiler/GCC)
 target_include_directories(${EXE} PUBLIC ${NABTO_DIR}/include)
 target_include_directories(${EXE} PUBLIC ${NABTO_DIR}/src)
+target_include_directories(${EXE} PRIVATE ${ne_priv_include_dirs})
 
 target_compile_options(${EXE} PUBLIC -ggdb3 -O0 -Wall)
 target_link_libraries(${EXE} pthread pcap)
 target_compile_definitions(${EXE} PUBLIC projCOVERAGE_TEST=0 _WINDOWS_)
+target_compile_definitions(${EXE} PRIVATE -DMBEDTLS_CONFIG_FILE=<nabto_mbedtls_config.h>)
 

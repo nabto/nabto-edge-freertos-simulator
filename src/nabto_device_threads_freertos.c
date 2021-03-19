@@ -31,6 +31,9 @@ static void NabtoThreadTask(void *data)
     struct nabto_device_thread *thread = (struct nabto_device_thread*)data;
     thread->function(thread->user_data);
     xSemaphoreGive((SemaphoreHandle_t)&thread->join_barrier);
+    // @TODO: A task suspends itself unless it is joined by
+    // nabto_device_threads_join. This may mean unless join is always called
+    // some dead threads will just lie around suspended.
     vTaskSuspend(NULL);
 }
 
@@ -95,6 +98,7 @@ void nabto_device_threads_join(struct nabto_device_thread *thread)
         // Wait for joining thread to finish
         xSemaphoreTake((SemaphoreHandle_t)&thread->join_barrier, portMAX_DELAY);
         
+        // Suspend all tasks while cleaning up this thread.
         vTaskSuspendAll();
         {
             xSemaphoreGive((SemaphoreHandle_t)&thread->join_barrier);
@@ -159,23 +163,6 @@ void nabto_device_threads_cond_signal(struct nabto_device_condition *cond)
     }
 }
 
-static void TestAndDecrement(struct nabto_device_condition *cond,
-                             unsigned local_waiting_threads)
-{
-    while (local_waiting_threads > 0)
-    {
-        if (ATOMIC_COMPARE_AND_SWAP_SUCCESS ==
-            Atomic_CompareAndSwap_u32((uint32_t*)&cond->waiting_threads,
-                                      (uint32_t)local_waiting_threads-1,
-                                      (uint32_t)local_waiting_threads))
-        {
-            break;
-        }
-
-        local_waiting_threads = cond->waiting_threads;
-    }
-}
-
 void nabto_device_threads_cond_timed_wait(struct nabto_device_condition *cond,
                                           struct nabto_device_mutex *mut,
                                           uint32_t ms)
@@ -197,7 +184,21 @@ void nabto_device_threads_cond_timed_wait(struct nabto_device_condition *cond,
     }
     else
     {
-        TestAndDecrement(cond, local_waiting_threads+1);
+        nabto_device_threads_mutex_lock(mut);
+
+        // Try to decrement cond->waiting_threads
+        while (local_waiting_threads > 0)
+        {
+            if (ATOMIC_COMPARE_AND_SWAP_SUCCESS ==
+                Atomic_CompareAndSwap_u32((uint32_t*)&cond->waiting_threads,
+                                          (uint32_t)local_waiting_threads-1,
+                                          (uint32_t)local_waiting_threads))
+            {
+                break;
+            }
+
+            local_waiting_threads = cond->waiting_threads;
+        }
     }
 }
 
