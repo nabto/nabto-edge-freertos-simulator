@@ -6,18 +6,21 @@ option(DEVICE_BUILD_TESTS "" OFF)
 option(DEVICE_BUILD_APPS "" OFF)
 
 set(KERNEL_DIR FreeRTOS/Kernel)
-set(TCP_DIR FreeRTOS/FreeRTOS-Plus-TCP)
+set(LWIP_DIR lwip)
+set(LWIP_CONTRIB_DIR lwip-contrib)
 set(NABTO_DIR nabto-embedded-sdk)
 
 add_subdirectory(${NABTO_DIR})
 
 include(${NABTO_DIR}/nabto_primary_files.cmake)
+include(${LWIP_CONTRIB_DIR}/ports/CMakeCommon.cmake)
 
 set(SOURCE_FILES
     src/main.c
     src/console.c
     src/nabto_device_threads_freertos.c
-    src/platform_integration.c)
+    src/platform_integration.c
+    src/default_netif.c)
 
 set(KERNEL_SOURCE_FILES
     ${KERNEL_DIR}/croutine.c
@@ -31,19 +34,6 @@ set(KERNEL_SOURCE_FILES
     ${KERNEL_DIR}/portable/ThirdParty/GCC/Posix/utils/wait_for_event.c
     ${KERNEL_DIR}/portable/ThirdParty/GCC/Posix/port.c)
 
-set(TCP_SOURCE_FILES
-    ${TCP_DIR}/FreeRTOS_DNS.c
-    ${TCP_DIR}/FreeRTOS_DHCP.c
-    ${TCP_DIR}/FreeRTOS_ARP.c
-    ${TCP_DIR}/FreeRTOS_TCP_WIN.c
-    ${TCP_DIR}/FreeRTOS_Stream_Buffer.c
-    ${TCP_DIR}/portable/BufferManagement/BufferAllocation_2.c
-    ${TCP_DIR}/FreeRTOS_IP.c
-    ${TCP_DIR}/FreeRTOS_TCP_IP.c
-    ${TCP_DIR}/FreeRTOS_UDP_IP.c
-    ${TCP_DIR}/FreeRTOS_Sockets.c
-    ${TCP_DIR}/portable/NetworkInterface/linux/NetworkInterface.c)
-
 set(NABTO_SOURCE_FILES
     ${NABTO_DIR}/src/api_test/nabto_device_test_threads.c
     ${NABTO_DIR}/src/api/nabto_device_error.c
@@ -53,30 +43,37 @@ set(NABTO_SOURCE_FILES
     ${ne_api_test_src})
 
 set_property(SOURCE ${SOURCE_FILES} PROPERTY COMPILE_FLAGS "-Wall -Werror -Wextra")
-set_property(SOURCE ${TCP_SOURCE_FILES} PROPERTY COMPILE_FLAGS "-Wno-address-of-packed-member")
+set_property(SOURCE ${NABTO_DIR}/src/core/nc_version.c PROPERTY GENERATED 1)
+
+
+set(LWIP_INCLUDE_DIRS
+    src
+    ${LWIP_DIR}/src/include
+    ${LWIP_CONTRIB_DIR}
+    ${LWIP_CONTRIB_DIR}/ports/unix/port/include)
+
+include(${LWIP_DIR}/src/Filelists.cmake)
+include(${LWIP_CONTRIB_DIR}/Filelists.cmake)
+include(${LWIP_CONTRIB_DIR}/ports/unix/Filelists.cmake)
 
 set(EXE nabto_demo)
 add_executable(${EXE}
     ${SOURCE_FILES}
     ${KERNEL_SOURCE_FILES}
-    ${TCP_SOURCE_FILES}
     ${NABTO_SOURCE_FILES})
 
 target_include_directories(${EXE} PUBLIC src)
 target_include_directories(${EXE} SYSTEM PUBLIC ${KERNEL_DIR}/include)
 target_include_directories(${EXE} SYSTEM PUBLIC ${KERNEL_DIR}/portable/ThirdParty/GCC/Posix)
 target_include_directories(${EXE} SYSTEM PUBLIC ${KERNEL_DIR}/portable/ThirdParty/GCC/Posix/utils)
-target_include_directories(${EXE} SYSTEM PUBLIC ${TCP_DIR})
-target_include_directories(${EXE} SYSTEM PUBLIC ${TCP_DIR}/portable/NetworkInterface/linux)
-target_include_directories(${EXE} SYSTEM PUBLIC ${TCP_DIR}/include)
-target_include_directories(${EXE} SYSTEM PUBLIC ${TCP_DIR}/portable/Compiler/GCC)
+target_include_directories(${EXE} PRIVATE ${LWIP_INCLUDE_DIRS})
 target_include_directories(${EXE} SYSTEM PUBLIC ${NABTO_DIR}/include)
 target_include_directories(${EXE} SYSTEM PUBLIC ${NABTO_DIR}/src)
 target_include_directories(${EXE} SYSTEM PRIVATE ${ne_priv_include_dirs})
 
 add_dependencies(${EXE} GENERATE_VERSION)
 target_compile_options(${EXE} PUBLIC -ggdb3 -O0)
-target_link_libraries(${EXE} pthread pcap)
 target_compile_definitions(${EXE} PUBLIC projCOVERAGE_TEST=0 _WINDOWS_)
-target_compile_definitions(${EXE} PRIVATE -DMBEDTLS_CONFIG_FILE=<nabto_mbedtls_config.h>)
+target_compile_definitions(${EXE} PRIVATE -DMBEDTLS_CONFIG_FILE=<nabto_mbedtls_config.h> ${LWIP_DEFINITIONS} ${LWIP_MBEDTLS_DEFINITIONS})
+target_link_libraries(${EXE} pthread ${LWIP_SANITIZER_LIBS} lwipcontribportunix lwipallapps lwipcore )
 

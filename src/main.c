@@ -4,8 +4,18 @@
 // FreeRTOS includes
 #include <FreeRTOS.h>
 #include <task.h>
-#include <FreeRTOS_IP.h>
-#include <FreeRTOS_Sockets.h>
+
+// lwIP includes
+#include "lwip/sys.h"
+#include "lwip/timeouts.h"
+#include "lwip/debug.h"
+#include "lwip/stats.h"
+#include "lwip/init.h"
+#include "lwip/tcpip.h"
+#include "lwip/netif.h"
+#include "lwip/api.h"
+#include "lwip/etharp.h"
+#include "netif/ethernet.h"
 
 // Nabto includes
 #include <nabto/nabto_device.h>
@@ -18,14 +28,6 @@
 StackType_t uxTimerTaskStack[configTIMER_TASK_STACK_DEPTH];
 uint8_t ucHeap[configTOTAL_HEAP_SIZE];
 
-static const uint8_t ucIPAddress[]        = { 10,  10,  10, 200};
-static const uint8_t ucNetMask[]          = {255,   0,   0,   0};
-static const uint8_t ucGatewayAddress[]   = { 10,  10,  10,   1};
-static const uint8_t ucDNSServerAddress[] = {208,  67, 222, 222};
-
-const uint8_t ucMACAddress[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55 };
-static UBaseType_t next_rand;
-
 static void log_callback(NabtoDeviceLogMessage *msg, void *data)
 {
     UNUSED(data);
@@ -33,16 +35,6 @@ static void log_callback(NabtoDeviceLogMessage *msg, void *data)
     console_print("%5s: %s\n",
                   nabto_device_log_severity_as_string(msg->severity),
                   msg->message);
-}
-
-// @TODO: Better RNG algorithm.
-UBaseType_t uxRand(void)
-{
-    uint32_t mul = 0x015a4e35UL;
-    uint32_t inc = 1UL;
-
-    next_rand = (mul * next_rand) + inc;
-    return (int)(next_rand >> 16UL) & 0x7fffUL;
 }
 
 // Tests moved to another file since they're temporary.
@@ -62,26 +54,24 @@ void TestNabtoTask(void *parameters)
     vTaskDelete(NULL);
 }
 
+void nabto_lwip_init(void *arg)
+{
+    sys_sem_t *init_sem = (sys_sem_t*)arg;
+
+    sys_sem_signal(init_sem);
+}
+
 int main(void)
 {
-    // @TODO: Initialization should be done in a task?
-
-    // @TODO: Random seeding uses C time.h
-    // It should probably be platform-defined?
-    time_t now;
-    time(&now);
-    next_rand = (uint32_t)now;
-
     console_init();
+
+    sys_sem_t init_sem;
+    sys_sem_new(&init_sem, 0);
+    tcpip_init(nabto_lwip_init, &init_sem);
+
     xTaskCreate(TestNabtoTask, "test",
                 configMINIMAL_STACK_SIZE, NULL,
                 configMAX_PRIORITIES-1, NULL);
-
-    FreeRTOS_IPInit(ucIPAddress,
-                    ucNetMask,
-                    ucGatewayAddress,
-                    ucDNSServerAddress,
-                    ucMACAddress);
     vTaskStartScheduler();
     return 0;
 }
@@ -126,71 +116,5 @@ void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
     *ppxTimerTaskTCBBuffer = &xTimerTaskTCB;
     *ppxTimerTaskStackBuffer = uxTimerTaskStack;
     *pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
-}
-
-void vApplicationIPNetworkEventHook(eIPCallbackEvent_t network_event)
-{
-    uint32_t ip_address;
-    uint32_t net_mask;
-    uint32_t gateway_address;
-    uint32_t dns_server_address;
-    char buffer[16] = {0};
-
-    if (network_event == eNetworkUp)
-    {
-        FreeRTOS_GetAddressConfiguration(&ip_address, &net_mask, &gateway_address, &dns_server_address);
-        FreeRTOS_inet_ntoa(ip_address, buffer);
-        console_print("\r\n\r\nIP Address: %s\r\n", buffer);
-
-        FreeRTOS_inet_ntoa(net_mask, buffer);
-        console_print("Subnet Mask: %s\r\n", buffer);
-
-        FreeRTOS_inet_ntoa(gateway_address, buffer);
-        console_print("Gateway Address: %s\r\n", buffer);
-
-        FreeRTOS_inet_ntoa(dns_server_address, buffer);
-        console_print("DNS Server Address: %s\r\n\r\n\r\n", buffer);
-    }
-    else
-    {
-        console_print("Application idle hook network down\n");
-    }
-}
-
-const char* pcApplicationHostnameHook(void)
-{
-    return "FreeRTOS";
-}
-
-BaseType_t xApplicationDNSQueryHook(const char *name)
-{
-    BaseType_t result = pdPASS;
-    if (strcasecmp(name, pcApplicationHostnameHook()) != 0)
-    {
-        result = pdFAIL;
-    }
-    return result;
-}
-
-// @TODO: The following two functions are dummy implementations
-// that just return random numbers.
-uint32_t ulApplicationGetNextSequenceNumber(uint32_t source_address,
-                                            uint16_t source_port,
-                                            uint32_t destination_address,
-                                            uint16_t destination_port)
-{
-    UNUSED(source_address);
-    UNUSED(source_port);
-    UNUSED(destination_address);
-    UNUSED(destination_port);
-
-    return uxRand();
-}
-
-// Supplies a random number to FreeRTOS+TCP stack.
-BaseType_t xApplicationGetRandomNumber(uint32_t *number)
-{
-    *number = uxRand();
-    return pdTRUE;
 }
 
