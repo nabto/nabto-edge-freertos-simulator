@@ -98,3 +98,24 @@ void event_queue_test(void)
     nabto_device_test_free(device);
 }
 
+void dns_test(void)
+{
+    NabtoDevice *device = nabto_device_test_new();
+    NabtoDeviceFuture *future = nabto_device_future_new(device);
+
+    nabto_device_test_dns(device, future);
+
+    NabtoDeviceError ec = nabto_device_future_wait(future);
+
+    if (ec == NABTO_DEVICE_EC_OK)
+    {
+        console_print("DNS test has passed\n");
+    }
+    else
+    {
+        console_print("DNS test has failed\n");
+    }
+
+    nabto_device_future_free(future);
+    nabto_device_test_free(device);
+}

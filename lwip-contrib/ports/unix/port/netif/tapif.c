@@ -35,6 +35,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -271,6 +272,7 @@ low_level_input(struct netif *netif)
      variable. */
   readlen = read(tapif->fd, buf, sizeof(buf));
   if (readlen < 0) {
+    if (errno == EINTR) return NULL;
     perror("read returned -1");
     exit(1);
   }

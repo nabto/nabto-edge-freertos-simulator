@@ -53,7 +53,7 @@
 #define LWIP_SNMP_V3               (LWIP_SNMP)
 #endif
 
-#define LWIP_DNS                   LWIP_UDP
+#define LWIP_DNS                   1
 #define LWIP_MDNS_RESPONDER        LWIP_UDP
 
 #define LWIP_NUM_NETIF_CLIENT_DATA (LWIP_MDNS_RESPONDER)

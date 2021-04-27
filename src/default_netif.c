@@ -4,6 +4,8 @@
 #include "lwip/tcpip.h"
 #include "netif/tapif.h"
 
+#include "default_netif.h"
+
 static struct netif netif;
 
 #if LWIP_IPV4
