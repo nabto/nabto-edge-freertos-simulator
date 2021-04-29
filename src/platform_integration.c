@@ -8,6 +8,17 @@
 
 #include "common.h"
 
+
+void AsyncResolveIPv4(struct np_dns *obj, const char *host,
+                      struct np_ip_address *ips,
+                      size_t ips_size, size_t *ips_resolved,
+                      struct np_completion_event *completion_event);
+
+void AsyncResolveIPv6(struct np_dns *obj, const char *host,
+                      struct np_ip_address *ips,
+                      size_t ips_size, size_t *ips_resolved,
+                      struct np_completion_event *completion_event);
+
 struct platform_data
 {
     struct thread_event_queue event_queue;
@@ -17,6 +28,11 @@ static uint32_t freertos_now_ms(struct np_timestamp *obj);
 
 static struct np_timestamp_functions timestamp_module = {
     .now_ms = &freertos_now_ms
+};
+
+static struct np_dns_functions dns_module = {
+    .async_resolve_v4 = AsyncResolveIPv4,
+    .async_resolve_v6 = AsyncResolveIPv6
 };
 
 np_error_code nabto_device_platform_init(struct nabto_device_context *device,
@@ -29,6 +45,10 @@ np_error_code nabto_device_platform_init(struct nabto_device_context *device,
     ts.mptr = &timestamp_module;
     ts.data = NULL;
 
+    struct np_dns dns;
+    dns.mptr = &dns_module;
+    dns.data = NULL;
+
     thread_event_queue_init(&platform->event_queue, mutex, &ts);
     thread_event_queue_run(&platform->event_queue);
 
@@ -36,6 +56,7 @@ np_error_code nabto_device_platform_init(struct nabto_device_context *device,
 
     nabto_device_integration_set_timestamp_impl(device, &ts);
     nabto_device_integration_set_event_queue_impl(device, &event_queue_impl);
+    nabto_device_integration_set_dns_impl(device, &dns);
 
     nabto_device_integration_set_platform_data(device, platform);
 

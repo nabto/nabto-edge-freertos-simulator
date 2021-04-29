@@ -21,6 +21,10 @@
 // Nabto includes
 #include <nabto/nabto_device.h>
 #include <nabto/nabto_device_test.h>
+#include <platform/interfaces/np_dns.h>
+#include <platform/np_types.h>
+#include <platform/np_error_code.h>
+#include <platform/np_completion_event.h>
 
 // Project includes
 #include "common.h"
@@ -63,33 +67,11 @@ void TestNabtoTask(void *parameters)
     logging_test();
     timestamp_test();
     event_queue_test();
+    dns_test();
     vTaskDelete(NULL);
 }
 
-static void dns_found(const char *name, const ip_addr_t *addr, void *arg)
-{
-    UNUSED(arg);
-    console_print("%s: %s\n", name, addr ? ipaddr_ntoa(addr) : "<not found>");
-}
-
-static void dns_dorequest(void *arg)
-{
-    UNUSED(arg);
-    const char *hostname = "3com.com";
-    ip_addr_t resp;
-
-
-    if (dns_gethostbyname(hostname, &resp, dns_found, 0) == ERR_OK)
-    {
-        dns_found(hostname, &resp, 0);
-    }
-    else
-    {
-        console_print("Could not complete DNS request.\n");
-    }
-}
-
-static void StatusCallback(struct netif *state_netif)
+static void LWIPStatusCallback(struct netif *state_netif)
 {
   if (netif_is_up(state_netif)) {
     console_print("status_callback==UP, local interface IP is %s\n",
@@ -97,6 +79,101 @@ static void StatusCallback(struct netif *state_netif)
   } else {
     console_print("status_callback==DOWN\n");
   }
+}
+
+typedef struct
+{
+    size_t ips_size;
+    size_t *ips_resolved;
+    struct np_ip_address *ips;
+    struct np_completion_event *completion_event;
+    int addr_type;
+} DNSResolveEvent;
+
+static void DNSResolveCallback(const char *name, const ip_addr_t *addr, void *arg)
+{
+    console_print("DNS Resolve: %s --- %s\n", name, ipaddr_ntoa(addr));
+    DNSResolveEvent *event = (DNSResolveEvent*)arg;
+    if (addr && addr->type == event->addr_type && event->ips_size >= 1)
+    {
+        *event->ips_resolved = 1;
+
+        if (event->addr_type == IPADDR_TYPE_V4)
+        {
+            event->ips[0].type = NABTO_IPV4;
+            memcpy(event->ips[0].ip.v4,
+                   &addr->u_addr.ip4.addr,
+                   sizeof(event->ips[0].ip.v4));
+        }
+        else
+        {
+            event->ips[0].type = NABTO_IPV6;
+            memcpy(event->ips[0].ip.v6,
+                   addr->u_addr.ip6.addr,
+                   sizeof(event->ips[0].ip.v6));
+        }
+
+        np_completion_event_resolve(event->completion_event, NABTO_EC_OK);
+    }
+    else
+    {
+        np_completion_event_resolve(event->completion_event, NABTO_EC_UNKNOWN);
+    }
+}
+
+void AsyncResolve(struct np_dns *obj, const char *host,
+                  struct np_ip_address *ips,
+                  size_t ips_size, size_t *ips_resolved,
+                  struct np_completion_event *completion_event,
+                  int addr_type)
+{
+    UNUSED(obj);
+    DNSResolveEvent *event = pvPortMalloc(sizeof *event);
+    event->ips_size = ips_size;
+    event->ips_resolved = ips_resolved;
+    event->ips = ips;
+    event->completion_event = completion_event;
+    event->addr_type = addr_type;
+    u8_t dns_addrtype = addr_type == IPADDR_TYPE_V4 ? LWIP_DNS_ADDRTYPE_IPV4 : LWIP_DNS_ADDRTYPE_IPV6;
+
+    sys_lock_tcpip_core();
+    struct ip_addr resolved;
+    err_t Error = dns_gethostbyname_addrtype(host, &resolved,
+                                             DNSResolveCallback, event,
+                                             dns_addrtype);
+    sys_unlock_tcpip_core();
+
+    switch (Error)
+    {
+        case ERR_OK:
+        case ERR_INPROGRESS:
+        {
+            console_print("DNS resolve for %s\n", host);
+        } break;
+
+        default:
+        {
+            console_print("Failed to send DNS request for %s\n", host);
+            np_completion_event_resolve(completion_event, NABTO_EC_UNKNOWN);
+            return;
+        }
+    }
+}
+
+void AsyncResolveIPv4(struct np_dns *obj, const char *host,
+                      struct np_ip_address *ips,
+                      size_t ips_size, size_t *ips_resolved,
+                      struct np_completion_event *completion_event)
+{
+    AsyncResolve(obj, host, ips, ips_size, ips_resolved, completion_event, IPADDR_TYPE_V4);
+}
+
+void AsyncResolveIPv6(struct np_dns *obj, const char *host,
+                      struct np_ip_address *ips,
+                      size_t ips_size, size_t *ips_resolved,
+                      struct np_completion_event *completion_event)
+{
+    AsyncResolve(obj, host, ips, ips_size, ips_resolved, completion_event, IPADDR_TYPE_V6);
 }
 
 static void LWIPInit(void * arg)
@@ -108,6 +185,7 @@ static void LWIPInit(void * arg)
 
   ip4_addr_t ipaddr, netmask, gw;
 
+  // @TODO: Allow using DHCP to get an address instead?
   ip4_addr_set_zero(&gw);
   ip4_addr_set_zero(&ipaddr);
   ip4_addr_set_zero(&netmask);
@@ -118,15 +196,16 @@ static void LWIPInit(void * arg)
   console_print("Starting lwIP, local interface IP is %s\n", ip4addr_ntoa(&ipaddr));
 
   init_default_netif(&ipaddr, &netmask, &gw);
-  netif_set_status_callback(netif_default, StatusCallback);
+  netif_set_status_callback(netif_default, LWIPStatusCallback);
 
   netif_set_up(netif_default);
 
+  // @TODO: Using google dns for now, should probably be exposed as an option instead.
   ip_addr_t dnsserver;
   IP_ADDR4(&dnsserver, 8,8,8,8);
   dns_setserver(0, &dnsserver);
-
-  sys_timeout(5000, dns_dorequest, NULL);
+  IP_ADDR4(&dnsserver, 8,8,4,4);
+  dns_setserver(1, &dnsserver);
 
   sys_sem_signal(init_sem);
 }
