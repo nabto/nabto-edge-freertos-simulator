@@ -32,10 +32,6 @@
 #include "lwipcfg.h"
 #include "console.h"
 
-#ifndef USE_ETHERNET
-#define USE_ETHERNET (USE_DEFAULT_ETH_NETIF || PPPOE_SUPPORT)
-#endif
-
 StackType_t uxTimerTaskStack[configTIMER_TASK_STACK_DEPTH];
 uint8_t ucHeap[configTOTAL_HEAP_SIZE];
 
@@ -73,12 +69,15 @@ void TestNabtoTask(void *parameters)
 
 static void LWIPStatusCallback(struct netif *state_netif)
 {
-  if (netif_is_up(state_netif)) {
-    console_print("status_callback==UP, local interface IP is %s\n",
-           ip4addr_ntoa(netif_ip4_addr(state_netif)));
-  } else {
-    console_print("status_callback==DOWN\n");
-  }
+    if (netif_is_up(state_netif))
+    {
+        console_print("status_callback==UP, local interface IP is %s\n",
+                      ip4addr_ntoa(netif_ip4_addr(state_netif)));
+    }
+    else
+    {
+        console_print("status_callback==DOWN\n");
+    }
 }
 
 typedef struct
@@ -178,36 +177,36 @@ void AsyncResolveIPv6(struct np_dns *obj, const char *host,
 
 static void LWIPInit(void * arg)
 {
-  sys_sem_t *init_sem;
-  init_sem = (sys_sem_t*)arg;
+    sys_sem_t *init_sem;
+    init_sem = (sys_sem_t*)arg;
 
-  srand((unsigned int)time(0));
+    srand((unsigned int)time(0));
 
-  ip4_addr_t ipaddr, netmask, gw;
+    ip4_addr_t ipaddr, netmask, gw;
 
-  // @TODO: Allow using DHCP to get an address instead?
-  ip4_addr_set_zero(&gw);
-  ip4_addr_set_zero(&ipaddr);
-  ip4_addr_set_zero(&netmask);
-  LWIP_PORT_INIT_GW(&gw);
-  LWIP_PORT_INIT_IPADDR(&ipaddr);
-  LWIP_PORT_INIT_NETMASK(&netmask);
+    // @TODO: Allow using DHCP to get an address instead?
+    ip4_addr_set_zero(&gw);
+    ip4_addr_set_zero(&ipaddr);
+    ip4_addr_set_zero(&netmask);
+    LWIP_PORT_INIT_GW(&gw);
+    LWIP_PORT_INIT_IPADDR(&ipaddr);
+    LWIP_PORT_INIT_NETMASK(&netmask);
 
-  console_print("Starting lwIP, local interface IP is %s\n", ip4addr_ntoa(&ipaddr));
+    console_print("Starting lwIP, local interface IP is %s\n", ip4addr_ntoa(&ipaddr));
 
-  init_default_netif(&ipaddr, &netmask, &gw);
-  netif_set_status_callback(netif_default, LWIPStatusCallback);
+    init_default_netif(&ipaddr, &netmask, &gw);
+    netif_set_status_callback(netif_default, LWIPStatusCallback);
 
-  netif_set_up(netif_default);
+    netif_set_up(netif_default);
 
-  // @TODO: Using google dns for now, should probably be exposed as an option instead.
-  ip_addr_t dnsserver;
-  IP_ADDR4(&dnsserver, 8,8,8,8);
-  dns_setserver(0, &dnsserver);
-  IP_ADDR4(&dnsserver, 8,8,4,4);
-  dns_setserver(1, &dnsserver);
+    // @TODO: Using google dns for now, should probably be exposed as an option instead.
+    ip_addr_t dnsserver;
+    IP_ADDR4(&dnsserver, 8,8,8,8);
+    dns_setserver(0, &dnsserver);
+    IP_ADDR4(&dnsserver, 8,8,4,4);
+    dns_setserver(1, &dnsserver);
 
-  sys_sem_signal(init_sem);
+    sys_sem_signal(init_sem);
 }
 
 void MainInit(void)
