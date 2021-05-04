@@ -119,12 +119,12 @@ static void nplwip_async_resolve(struct np_dns *obj, const char *host,
     event->addr_type = addr_type;
     u8_t dns_addrtype = addr_type == IPADDR_TYPE_V4 ? LWIP_DNS_ADDRTYPE_IPV4 : LWIP_DNS_ADDRTYPE_IPV6;
 
-    sys_lock_tcpip_core();
+    LOCK_TCPIP_CORE();
     struct ip_addr resolved;
     err_t Error = dns_gethostbyname_addrtype(host, &resolved,
                                              nplwip_dns_resolve_callback, event,
                                              dns_addrtype);
-    sys_unlock_tcpip_core();
+    UNLOCK_TCPIP_CORE();
 
     switch (Error)
     {
@@ -196,9 +196,9 @@ static np_error_code nplwip_create_socket(struct np_udp *obj, struct np_udp_sock
         return NABTO_EC_OUT_OF_MEMORY;
     }
 
-    sys_lock_tcpip_core();
+    LOCK_TCPIP_CORE();
     socket->upcb = udp_new_ip_type(IPADDR_TYPE_ANY);
-    sys_unlock_tcpip_core();
+    UNLOCK_TCPIP_CORE();
 
     // @TODO: Check if socket->upcb is valid.
 
@@ -223,10 +223,10 @@ static void nplwip_destroy_socket(struct np_udp_socket *socket)
 
     nplwip_abort_socket(socket);
     
-    sys_lock_tcpip_core();
+    LOCK_TCPIP_CORE();
     udp_remove(socket->upcb);
     vPortFree(socket);
-    sys_unlock_tcpip_core();
+    UNLOCK_TCPIP_CORE();
 }
 
 static void nplwip_async_bind_port(struct np_udp_socket *socket, uint16_t port,
@@ -241,7 +241,7 @@ static void nplwip_async_bind_port(struct np_udp_socket *socket, uint16_t port,
     }
     else
     {
-        sys_lock_tcpip_core();
+        LOCK_TCPIP_CORE();
         err_t error = udp_bind(socket->upcb, IP4_ADDR_ANY, port);
         if (error == ERR_OK)
         {
@@ -252,7 +252,7 @@ static void nplwip_async_bind_port(struct np_udp_socket *socket, uint16_t port,
             NABTO_LOG_ERROR(UDP_LOG, "lwip udp_bind() failed with error: %i", error);
             ec = NABTO_EC_UNKNOWN;
         }
-        sys_unlock_tcpip_core();
+        UNLOCK_TCPIP_CORE();
     }
 
     np_completion_event_resolve(completion_event, ec);
@@ -278,9 +278,9 @@ static void nplwip_async_sendto(struct np_udp_socket *socket, struct np_udp_endp
         ip_addr_t ip;
         nplwip_convertip_np_to_lwip(&ep->ip, &ip);
 
-        sys_lock_tcpip_core();
+        LOCK_TCPIP_CORE();
         err_t lwip_err = udp_sendto(socket->upcb, packet, &ip, ep->port);
-        sys_unlock_tcpip_core();
+        UNLOCK_TCPIP_CORE();
 
         if (lwip_err != ERR_OK)
         {
@@ -409,11 +409,11 @@ static np_error_code nplwip_tcp_create(struct np_tcp *obj, struct np_tcp_socket 
         return NABTO_EC_OUT_OF_MEMORY;
     }
 
-    sys_lock_tcpip_core();
+    LOCK_TCPIP_CORE();
     socket->pcb = tcp_new_ip_type(IPADDR_TYPE_ANY);
     tcp_arg(socket->pcb, socket);
     tcp_recv(socket->pcb, nplwip_tcp_recv_callback);
-    sys_unlock_tcpip_core();
+    UNLOCK_TCPIP_CORE();
 
     // @TODO: Check if socket->pcb is valid.
     // @TODO: Set an error callback with tcp_err()
@@ -424,9 +424,9 @@ static np_error_code nplwip_tcp_create(struct np_tcp *obj, struct np_tcp_socket 
 
 static void nplwip_tcp_abort(struct np_tcp_socket *socket)
 {
-    sys_lock_tcpip_core();
+    LOCK_TCPIP_CORE();
     tcp_abort(socket->pcb);
-    sys_unlock_tcpip_core();
+    UNLOCK_TCPIP_CORE();
 }
 
 static void nplwip_tcp_destroy(struct np_tcp_socket *socket)
@@ -437,12 +437,12 @@ static void nplwip_tcp_destroy(struct np_tcp_socket *socket)
         return;
     }
 
-    sys_lock_tcpip_core();
+    LOCK_TCPIP_CORE();
     tcp_arg(socket->pcb, NULL);
     tcp_sent(socket->pcb, NULL);
     tcp_recv(socket->pcb, NULL);
     err_t error = tcp_close(socket->pcb);
-    sys_unlock_tcpip_core();
+    UNLOCK_TCPIP_CORE();
     if (error == ERR_MEM)
     {
         NABTO_LOG_ERROR(TCP_LOG, "lwIP failed to close TCP socket due to lack of memory.")
@@ -460,9 +460,9 @@ static void nplwip_tcp_async_connect(struct np_tcp_socket *socket, struct np_ip_
 
     socket->connect_ce = completion_event;
 
-    sys_lock_tcpip_core();
+    LOCK_TCPIP_CORE();
     err_t error = tcp_connect(socket->pcb, &ip, port, nplwip_tcp_connected_callback);
-    sys_unlock_tcpip_core();
+    UNLOCK_TCPIP_CORE();
     if (error == ERR_MEM)
     {
         NABTO_LOG_ERROR(TCP_LOG, "TCP socket could not connect due to lack of memory.");
@@ -527,9 +527,9 @@ static void nplwip_tcp_async_read(struct np_tcp_socket *socket, void *buffer, si
 
 static void nplwip_tcp_shutdown(struct np_tcp_socket *socket)
 {
-    sys_lock_tcpip_core();
+    LOCK_TCPIP_CORE();
     err_t error = tcp_shutdown(socket->pcb, 0, 1);
-    sys_unlock_tcpip_core();
+    UNLOCK_TCPIP_CORE();
     if (error != ERR_OK)
     {
         NABTO_LOG_ERROR(TCP_LOG, "TCP socket shutdown failed for some reason.");
