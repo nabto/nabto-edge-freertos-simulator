@@ -24,6 +24,11 @@ void init_default_netif(void)
     netif_set_default(&netif);
 }
 
+struct netif* get_default_netif(void)
+{
+    return &netif;
+}
+
 void default_netif_poll(void)
 {
     tapif_poll(&netif);
@@ -32,3 +37,4 @@ void default_netif_poll(void)
 void default_netif_shutdown(void)
 {
 }
+

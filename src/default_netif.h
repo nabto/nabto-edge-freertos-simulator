@@ -11,5 +11,6 @@ void init_default_netif(void);
 
 void default_netif_poll(void);
 void default_netif_shutdown(void);
+struct netif* get_default_netif(void);
 
 #endif

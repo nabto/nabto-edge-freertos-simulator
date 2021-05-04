@@ -18,6 +18,7 @@
 #include <platform/np_logging.h>
 
 #include "common.h"
+#include "default_netif.h"
 
 #define DNS_LOG NABTO_LOG_MODULE_DNS
 #define UDP_LOG NABTO_LOG_MODULE_UDP
@@ -537,15 +538,24 @@ static void nplwip_tcp_shutdown(struct np_tcp_socket *socket)
 }
 
 // ---------------------
-// Local IP @TODO
+// Local IP
 // ---------------------
 
 static size_t nplwip_get_local_ips(struct np_local_ip *obj, struct np_ip_address *addrs, size_t addrs_size)
 {
     UNUSED(obj);
-    UNUSED(addrs);
-    UNUSED(addrs_size);
-    return 0;
+
+    if (addrs_size > 1)
+    {
+        struct netif *netif = get_default_netif();
+        const ip_addr_t *ip = netif_ip_addr4(netif);
+        nplwip_convertip_lwip_to_np(ip, addrs);
+        return 1;
+    }
+    else
+    {
+        return 0;
+    }
 }
 
 // ---------------------

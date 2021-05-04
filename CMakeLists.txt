@@ -46,7 +46,6 @@ set(NABTO_SOURCE_FILES
 set_property(SOURCE ${SOURCE_FILES} PROPERTY COMPILE_FLAGS "-Wall -Werror -Wextra")
 set_property(SOURCE ${NABTO_DIR}/src/core/nc_version.c PROPERTY GENERATED 1)
 
-
 set(LWIP_INCLUDE_DIRS
     src
     ${LWIP_DIR}/src/include
