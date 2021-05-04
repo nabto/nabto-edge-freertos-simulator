@@ -425,7 +425,7 @@ tapif_thread(void *arg)
     if(ret == 1) {
       /* Handle incoming packet. */
       tapif_input(netif);
-    } else if(ret == -1) {
+    } else if(ret == -1 && errno != EINTR) {
       perror("tapif_thread: select");
     }
   }

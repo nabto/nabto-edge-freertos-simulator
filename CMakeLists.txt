@@ -20,6 +20,7 @@ set(SOURCE_FILES
     src/console.c
     src/nabto_device_threads_freertos.c
     src/platform_integration.c
+    src/nabto_lwip.c
     src/default_netif.c)
 
 set(KERNEL_SOURCE_FILES

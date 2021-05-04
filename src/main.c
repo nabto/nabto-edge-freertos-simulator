@@ -16,15 +16,18 @@
 #include "lwip/api.h"
 #include "lwip/etharp.h"
 #include "lwip/dns.h"
+#include "lwip/udp.h"
 #include "netif/ethernet.h"
 
 // Nabto includes
 #include <nabto/nabto_device.h>
 #include <nabto/nabto_device_test.h>
 #include <platform/interfaces/np_dns.h>
+#include <platform/interfaces/np_udp.h>
 #include <platform/np_types.h>
 #include <platform/np_error_code.h>
 #include <platform/np_completion_event.h>
+#include <platform/np_logging.h>
 
 // Project includes
 #include "common.h"
@@ -64,6 +67,8 @@ void TestNabtoTask(void *parameters)
     timestamp_test();
     event_queue_test();
     dns_test();
+    networking_test();
+    local_ip_test();
     vTaskDelete(NULL);
 }
 
@@ -80,102 +85,7 @@ static void LWIPStatusCallback(struct netif *state_netif)
     }
 }
 
-typedef struct
-{
-    size_t ips_size;
-    size_t *ips_resolved;
-    struct np_ip_address *ips;
-    struct np_completion_event *completion_event;
-    int addr_type;
-} DNSResolveEvent;
-
-static void DNSResolveCallback(const char *name, const ip_addr_t *addr, void *arg)
-{
-    console_print("DNS Resolve: %s --- %s\n", name, ipaddr_ntoa(addr));
-    DNSResolveEvent *event = (DNSResolveEvent*)arg;
-    if (addr && addr->type == event->addr_type && event->ips_size >= 1)
-    {
-        *event->ips_resolved = 1;
-
-        if (event->addr_type == IPADDR_TYPE_V4)
-        {
-            event->ips[0].type = NABTO_IPV4;
-            memcpy(event->ips[0].ip.v4,
-                   &addr->u_addr.ip4.addr,
-                   sizeof(event->ips[0].ip.v4));
-        }
-        else
-        {
-            event->ips[0].type = NABTO_IPV6;
-            memcpy(event->ips[0].ip.v6,
-                   addr->u_addr.ip6.addr,
-                   sizeof(event->ips[0].ip.v6));
-        }
-
-        np_completion_event_resolve(event->completion_event, NABTO_EC_OK);
-    }
-    else
-    {
-        np_completion_event_resolve(event->completion_event, NABTO_EC_UNKNOWN);
-    }
-}
-
-void AsyncResolve(struct np_dns *obj, const char *host,
-                  struct np_ip_address *ips,
-                  size_t ips_size, size_t *ips_resolved,
-                  struct np_completion_event *completion_event,
-                  int addr_type)
-{
-    UNUSED(obj);
-    DNSResolveEvent *event = pvPortMalloc(sizeof *event);
-    event->ips_size = ips_size;
-    event->ips_resolved = ips_resolved;
-    event->ips = ips;
-    event->completion_event = completion_event;
-    event->addr_type = addr_type;
-    u8_t dns_addrtype = addr_type == IPADDR_TYPE_V4 ? LWIP_DNS_ADDRTYPE_IPV4 : LWIP_DNS_ADDRTYPE_IPV6;
-
-    sys_lock_tcpip_core();
-    struct ip_addr resolved;
-    err_t Error = dns_gethostbyname_addrtype(host, &resolved,
-                                             DNSResolveCallback, event,
-                                             dns_addrtype);
-    sys_unlock_tcpip_core();
-
-    switch (Error)
-    {
-        case ERR_OK:
-        case ERR_INPROGRESS:
-        {
-            console_print("DNS resolve for %s\n", host);
-        } break;
-
-        default:
-        {
-            console_print("Failed to send DNS request for %s\n", host);
-            np_completion_event_resolve(completion_event, NABTO_EC_UNKNOWN);
-            return;
-        }
-    }
-}
-
-void AsyncResolveIPv4(struct np_dns *obj, const char *host,
-                      struct np_ip_address *ips,
-                      size_t ips_size, size_t *ips_resolved,
-                      struct np_completion_event *completion_event)
-{
-    AsyncResolve(obj, host, ips, ips_size, ips_resolved, completion_event, IPADDR_TYPE_V4);
-}
-
-void AsyncResolveIPv6(struct np_dns *obj, const char *host,
-                      struct np_ip_address *ips,
-                      size_t ips_size, size_t *ips_resolved,
-                      struct np_completion_event *completion_event)
-{
-    AsyncResolve(obj, host, ips, ips_size, ips_resolved, completion_event, IPADDR_TYPE_V6);
-}
-
-static void LWIPInit(void * arg)
+static void LWIPInit(void *arg)
 {
     sys_sem_t *init_sem;
     init_sem = (sys_sem_t*)arg;
@@ -207,11 +117,6 @@ static void LWIPInit(void * arg)
     dns_setserver(1, &dnsserver);
 
     sys_sem_signal(init_sem);
-}
-
-void MainInit(void)
-{
-    console_init();
 }
 
 void LWIPLoop(void *arg)

@@ -7,17 +7,7 @@
 #include <modules/event_queue/thread_event_queue.h>
 
 #include "common.h"
-
-
-void AsyncResolveIPv4(struct np_dns *obj, const char *host,
-                      struct np_ip_address *ips,
-                      size_t ips_size, size_t *ips_resolved,
-                      struct np_completion_event *completion_event);
-
-void AsyncResolveIPv6(struct np_dns *obj, const char *host,
-                      struct np_ip_address *ips,
-                      size_t ips_size, size_t *ips_resolved,
-                      struct np_completion_event *completion_event);
+#include "nabto_lwip.h"
 
 struct platform_data
 {
@@ -30,11 +20,6 @@ static struct np_timestamp_functions timestamp_module = {
     .now_ms = &freertos_now_ms
 };
 
-static struct np_dns_functions dns_module = {
-    .async_resolve_v4 = AsyncResolveIPv4,
-    .async_resolve_v6 = AsyncResolveIPv6
-};
-
 np_error_code nabto_device_platform_init(struct nabto_device_context *device,
                                          struct nabto_device_mutex *mutex)
 {
@@ -45,9 +30,10 @@ np_error_code nabto_device_platform_init(struct nabto_device_context *device,
     ts.mptr = &timestamp_module;
     ts.data = NULL;
 
-    struct np_dns dns;
-    dns.mptr = &dns_module;
-    dns.data = NULL;
+    struct np_dns dns = nplwip_get_dns_impl();
+    struct np_udp udp = nplwip_get_udp_impl();
+    struct np_tcp tcp = nplwip_get_tcp_impl();
+    struct np_local_ip localip = nplwip_get_local_ip_impl();
 
     thread_event_queue_init(&platform->event_queue, mutex, &ts);
     thread_event_queue_run(&platform->event_queue);
@@ -57,6 +43,9 @@ np_error_code nabto_device_platform_init(struct nabto_device_context *device,
     nabto_device_integration_set_timestamp_impl(device, &ts);
     nabto_device_integration_set_event_queue_impl(device, &event_queue_impl);
     nabto_device_integration_set_dns_impl(device, &dns);
+    nabto_device_integration_set_udp_impl(device, &udp);
+    nabto_device_integration_set_tcp_impl(device, &tcp);
+    nabto_device_integration_set_local_ip_impl(device, &localip);
 
     nabto_device_integration_set_platform_data(device, platform);
 
