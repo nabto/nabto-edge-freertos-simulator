@@ -4,25 +4,32 @@
 
 #include <FreeRTOS.h>
 
-#include "lwip/dns.h"
-#include "lwip/udp.h"
-#include "lwip/tcp.h"
+#include <lwip/dns.h>
+#include <lwip/udp.h>
+#include <lwip/tcp.h>
+#include <lwip/netif.h>
+#include <lwip/apps/mdns.h>
 
 #include <platform/interfaces/np_dns.h>
 #include <platform/interfaces/np_udp.h>
 #include <platform/interfaces/np_tcp.h>
+#include <platform/interfaces/np_mdns.h>
 
 #include <platform/np_types.h>
 #include <platform/np_error_code.h>
 #include <platform/np_completion_event.h>
 #include <platform/np_logging.h>
 
+#include <nn/string_set.h>
+#include <nn/string_map.h>
+
 #include "common.h"
 #include "default_netif.h"
 
-#define DNS_LOG NABTO_LOG_MODULE_DNS
-#define UDP_LOG NABTO_LOG_MODULE_UDP
-#define TCP_LOG NABTO_LOG_MODULE_TCP
+#define DNS_LOG  NABTO_LOG_MODULE_DNS
+#define UDP_LOG  NABTO_LOG_MODULE_UDP
+#define TCP_LOG  NABTO_LOG_MODULE_TCP
+#define MDNS_LOG NABTO_LOG_MODULE_MDNS
 
 typedef struct
 {
@@ -204,6 +211,8 @@ static np_error_code nplwip_create_socket(struct np_udp *obj, struct np_udp_sock
     // @TODO: Check if socket->upcb is valid.
 
     socket->aborted = false;
+    socket->packet = NULL;
+    socket->ce = NULL;
 
     *out_socket = socket;
     return NABTO_EC_OK;
@@ -416,6 +425,9 @@ static np_error_code nplwip_tcp_create(struct np_tcp *obj, struct np_tcp_socket 
     tcp_recv(socket->pcb, nplwip_tcp_recv_callback);
     UNLOCK_TCPIP_CORE();
 
+    socket->connect_ce = NULL;
+    socket->packet = NULL;
+
     // @TODO: Check if socket->pcb is valid.
     // @TODO: Set an error callback with tcp_err()
 
@@ -559,8 +571,68 @@ static size_t nplwip_get_local_ips(struct np_local_ip *obj, struct np_ip_address
 }
 
 // ---------------------
-// mDNS @TODO
+// mDNS
 // ---------------------
+
+typedef struct
+{
+    s32_t service;
+} nplwip_mdns_ctx;
+
+static void nplwip_serve_txt(struct mdns_service *service, void *txt_userdata)
+{
+    struct nn_string_map *txt_items = (struct nn_string_map*)txt_userdata;
+    struct nn_string_map_iterator it = nn_string_map_begin(txt_items);
+    while (!nn_string_map_is_end(&it))
+    {
+        const char *key = nn_string_map_key(&it);
+        const char *value = nn_string_map_value(&it);
+        size_t key_len = strlen(key);
+        size_t val_len = strlen(value);
+
+        // @TODO: It's probably not smart to be allocating in a loop like this.
+        char *txt = pvPortMalloc(key_len + val_len + 1);
+        txt[0] = 0;
+        strcat(txt, key);
+        strcat(txt, "=");
+        strcat(txt, value);
+
+        // @TODO: Assert that we're not putting more than 255 bytes of data into txt (lwip limit)
+        err_t error = mdns_resp_add_service_txtitem(service, txt, strlen(txt));
+        vPortFree(txt);
+
+        if (error)
+        {
+            NABTO_LOG_ERROR(MDNS_LOG, "error when calling mdns_resp_add_service_txtitem");
+            break;
+        }
+
+        nn_string_map_next(&it);
+    }
+}
+
+static void nplwip_publish_service(struct np_mdns *obj, uint16_t port, const char *instance_name,
+                                   struct nn_string_set *subtypes, struct nn_string_map *txt_items)
+{
+    // @TODO: Subtypes are possibly not supported by lwip?
+    UNUSED(subtypes);
+    nplwip_mdns_ctx *context = (nplwip_mdns_ctx*)obj->data;
+
+    // @TODO: Do we need to copy txt_items?
+    LOCK_TCPIP_CORE();
+    context->service = mdns_resp_add_service(netif_default, instance_name, "_nabto",
+                                             DNSSD_PROTO_UDP, port, 3600,
+                                             nplwip_serve_txt, txt_items);
+    UNLOCK_TCPIP_CORE();
+}
+
+static void nplwip_unpublish_service(struct np_mdns *obj)
+{
+    nplwip_mdns_ctx *context = (nplwip_mdns_ctx*)obj->data;
+    LOCK_TCPIP_CORE();
+    mdns_resp_del_service(netif_default, context->service);
+    UNLOCK_TCPIP_CORE();
+}
 
 // ---------------------
 // Public interface
@@ -596,6 +668,11 @@ static struct np_local_ip_functions local_ip_module = {
     .get_local_ips = nplwip_get_local_ips
 };
 
+static struct np_mdns_functions mdns_module = {
+    .publish_service = nplwip_publish_service,
+    .unpublish_service = nplwip_unpublish_service
+};
+
 struct np_dns nplwip_get_dns_impl()
 {
     struct np_dns obj;
@@ -625,6 +702,14 @@ struct np_local_ip nplwip_get_local_ip_impl()
     struct np_local_ip obj;
     obj.mptr = &local_ip_module;
     obj.data = NULL;
+    return obj;
+}
+
+struct np_mdns nplwip_get_mdns_impl()
+{
+    struct np_mdns obj;
+    obj.mptr = &mdns_module;
+    obj.data = pvPortMalloc(sizeof(nplwip_mdns_ctx));
     return obj;
 }
 

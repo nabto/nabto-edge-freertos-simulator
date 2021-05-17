@@ -190,3 +190,16 @@ void local_ip_test(void)
 
     nabto_device_test_free(device);
 }
+
+void mdns_test(void)
+{
+    NabtoDevice *device = nabto_device_test_new();
+    nabto_device_set_log_callback(device, log_callback, NULL);
+    nabto_device_set_log_level(device, "info");
+    
+    nabto_device_test_mdns_publish_service(device);
+    console_print("mDNS test has passed if _nabto._udp.local mdns service "
+                  "and subtype pr-12345678-de-abcdefgh._sub._nabto._udp.local "
+                  "can be discovered by a mdns client\n");
+}
+

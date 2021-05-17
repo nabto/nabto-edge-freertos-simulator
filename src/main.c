@@ -17,6 +17,7 @@
 #include "lwip/etharp.h"
 #include "lwip/dns.h"
 #include "lwip/udp.h"
+#include "lwip/apps/mdns.h"
 #include "netif/ethernet.h"
 
 // Nabto includes
@@ -69,6 +70,7 @@ void TestNabtoTask(void *parameters)
     dns_test();
     networking_test();
     local_ip_test();
+    mdns_test();
     vTaskDelete(NULL);
 }
 
@@ -83,6 +85,12 @@ static void LWIPStatusCallback(struct netif *state_netif)
     {
         console_print("status_callback==DOWN\n");
     }
+}
+
+static void
+lwip_mdns_report(struct netif* netif, u8_t result)
+{
+  LWIP_PLATFORM_DIAG(("mdns status[netif %d]: %d\n", netif->num, result));
 }
 
 static void LWIPInit(void *arg)
@@ -102,11 +110,14 @@ static void LWIPInit(void *arg)
     LWIP_PORT_INIT_IPADDR(&ipaddr);
     LWIP_PORT_INIT_NETMASK(&netmask);
 
-    console_print("Starting lwIP, local interface IP is %s\n", ip4addr_ntoa(&ipaddr));
 
     init_default_netif(&ipaddr, &netmask, &gw);
-    netif_set_status_callback(netif_default, LWIPStatusCallback);
+    netif_create_ip6_linklocal_address(netif_default, 1);
 
+    console_print("Starting lwIP, local interface IP is %s\n", ip4addr_ntoa(&ipaddr));
+    console_print("ip6 linklocal address: %s\n", ip6addr_ntoa(netif_ip6_addr(netif_default, 0)));
+
+    netif_set_status_callback(netif_default, LWIPStatusCallback);
     netif_set_up(netif_default);
 
     // @TODO: Using google dns for now, should probably be exposed as an option instead.
@@ -115,6 +126,11 @@ static void LWIPInit(void *arg)
     dns_setserver(0, &dnsserver);
     IP_ADDR4(&dnsserver, 8,8,4,4);
     dns_setserver(1, &dnsserver);
+
+    mdns_resp_register_name_result_cb(lwip_mdns_report);
+    mdns_resp_init();
+    mdns_resp_add_netif(netif_default, "lwip", 3600);
+    mdns_resp_announce(netif_default);
 
     sys_sem_signal(init_sem);
 }
