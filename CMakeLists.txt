@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.2)
 project(nabto-freertos)
 
+# @TODO: This is for string_file.c, which we probably shouldn't be using since it's platform-specific code.
+add_definitions(-DHAVE_UNISTD_H)
+
 option(DEVICE_BUILD_EXAMPLES "" OFF)
 option(DEVICE_BUILD_TESTS "" OFF)
 option(DEVICE_BUILD_APPS "" OFF)
@@ -18,7 +21,9 @@ include(${LWIP_CONTRIB_DIR}/ports/CMakeCommon.cmake)
 set(SOURCE_FILES
     src/main.c
     src/console.c
-    src/nabto_device_threads_freertos.c
+    src/coap.c
+    # src/nabto_device_threads_freertos.c
+    ${NABTO_DIR}/src/modules/threads/unix/nabto_device_threads_unix.c
     src/platform_integration.c
     src/nabto_lwip.c
     src/default_netif.c)
@@ -40,6 +45,7 @@ set(NABTO_SOURCE_FILES
     ${NABTO_DIR}/src/api/nabto_device_error.c
     ${NABTO_DIR}/src/modules/event_queue/thread_event_queue.c
     ${NABTO_DIR}/src/modules/event_queue/nm_event_queue.c
+    ${NABTO_DIR}/apps/common/string_file.c # @TODO: Probably shouldn't use this? (see todo above)
     ${ne_required_src}
     ${ne_api_test_src})
 
@@ -70,6 +76,7 @@ target_include_directories(${EXE} PRIVATE ${LWIP_INCLUDE_DIRS})
 target_include_directories(${EXE} SYSTEM PUBLIC ${NABTO_DIR}/include)
 target_include_directories(${EXE} SYSTEM PUBLIC ${NABTO_DIR}/src)
 target_include_directories(${EXE} SYSTEM PRIVATE ${ne_priv_include_dirs})
+target_include_directories(${EXE} SYSTEM PRIVATE ${NABTO_DIR})
 
 add_dependencies(${EXE} GENERATE_VERSION)
 target_compile_options(${EXE} PUBLIC -ggdb3 -O0)

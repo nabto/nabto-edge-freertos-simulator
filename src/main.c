@@ -35,6 +35,7 @@
 #include "default_netif.h"
 #include "lwipcfg.h"
 #include "console.h"
+#include "coap.h"
 
 StackType_t uxTimerTaskStack[configTIMER_TASK_STACK_DEPTH];
 uint8_t ucHeap[configTOTAL_HEAP_SIZE];
@@ -43,36 +44,6 @@ static struct
 {
     TaskHandle_t main_loop;
 } globals;
-
-static void log_callback(NabtoDeviceLogMessage *msg, void *data)
-{
-    UNUSED(data);
-
-    console_print("%5s: %s\n",
-                  nabto_device_log_severity_as_string(msg->severity),
-                  msg->message);
-}
-
-// Tests moved to another file since they're temporary.
-#include "tests.inl"
-
-void TestNabtoTask(void *parameters)
-{
-    UNUSED(parameters);
-
-    console_print("FreeRTOS Version %s\n", tskKERNEL_VERSION_NUMBER);
-    thread_test();
-    create_device_test();
-    future_test();
-    logging_test();
-    timestamp_test();
-    event_queue_test();
-    dns_test();
-    networking_test();
-    local_ip_test();
-    mdns_test();
-    vTaskDelete(NULL);
-}
 
 static void LWIPStatusCallback(struct netif *state_netif)
 {
@@ -162,6 +133,13 @@ void LWIPLoop(void *arg)
     vTaskDelete(NULL);
 }
 
+void NabtoMain(void *arg)
+{
+    UNUSED(arg);
+    nabto_coap();
+    vTaskDelete(NULL);
+}
+
 void MainLoop(void *arg)
 {
     UNUSED(arg);
@@ -172,7 +150,7 @@ void MainLoop(void *arg)
                 configMAX_PRIORITIES-1, NULL);
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    xTaskCreate(TestNabtoTask, "NabtoTest",
+    xTaskCreate(NabtoMain, "NabtoMain",
                 configMINIMAL_STACK_SIZE, NULL,
                 configMAX_PRIORITIES-1, NULL);
 
@@ -188,6 +166,7 @@ int main(void)
     xTaskCreate(MainLoop, "MainLoop",
                 configMINIMAL_STACK_SIZE, NULL,
                 configMAX_PRIORITIES-1, &globals.main_loop);
+
     vTaskStartScheduler();
     return 0;
 }
