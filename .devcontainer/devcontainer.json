@@ -1,0 +1,12 @@
+{
+	"dockerFile": "../Dockerfile",
+	"extensions": [
+		"ms-vscode.cmake-tools",
+		"ms-vscode.cpptools"
+	],
+	"settings": {
+		"cmake.sourceDirectory": "${workspaceFolder}"
+	},
+	"remoteUser": "vscode",
+	"runArgs": ["--privileged"]
+}
