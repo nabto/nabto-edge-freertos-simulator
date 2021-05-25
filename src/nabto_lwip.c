@@ -302,7 +302,12 @@ static void nplwip_async_sendto(struct np_udp_socket *socket, struct np_udp_endp
         err_t lwip_err = udp_sendto(socket->upcb, packet, &ip, ep->port);
         UNLOCK_TCPIP_CORE();
 
-        if (lwip_err != ERR_OK)
+        if (lwip_err == ERR_VAL)
+        {
+            // probably because we are sending an ipv6 packet etc
+            ec = NABTO_EC_OK;
+        }
+        else if (lwip_err != ERR_OK)
         {
             NABTO_LOG_ERROR(UDP_LOG, "Unknown lwIP error in udp_sendto().");
             ec = NABTO_EC_UNKNOWN;

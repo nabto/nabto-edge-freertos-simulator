@@ -51,10 +51,12 @@ static struct
 
 void vApplicationIdleHook()
 {
+    taskENTER_CRITICAL();
     struct timespec req;
-    req.tv_nsec = 0;
-    req.tv_sec = 1;
+    req.tv_nsec = 1000000; // 1ms
+    req.tv_sec = 0;
     nanosleep(&req, NULL);
+    taskEXIT_CRITICAL();
 }
 
 static void LWIPStatusCallback(struct netif *state_netif)
