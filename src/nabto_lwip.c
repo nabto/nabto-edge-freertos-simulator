@@ -137,6 +137,14 @@ static void nplwip_async_resolve(struct np_dns *obj, const char *host,
     switch (Error)
     {
         case ERR_OK:
+        {
+            NABTO_LOG_INFO(DNS_LOG, "DNS resolved %s to %s", host, ipaddr_ntoa(&resolved));
+            vPortFree(event);
+            *ips_resolved = 1;
+            nplwip_convertip_lwip_to_np(&resolved, &ips[0]);
+            np_completion_event_resolve(completion_event, NABTO_EC_OK);
+            break;
+        }
         case ERR_INPROGRESS:
         {
             // We can log something here if we want to.
