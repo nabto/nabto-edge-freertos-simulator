@@ -278,42 +278,50 @@ static void nplwip_async_bind_port(struct np_udp_socket *socket, uint16_t port,
     np_completion_event_resolve(completion_event, ec);
 }
 
-static void nplwip_async_sendto(struct np_udp_socket *socket, struct np_udp_endpoint *ep,
-                                uint8_t *buffer, uint16_t buffer_size,
-                                struct np_completion_event *completion_event)
+static np_error_code nplwip_async_sendto_ec(struct np_udp_socket *socket, struct np_udp_endpoint *ep,
+                                   uint8_t *buffer, uint16_t buffer_size)
 {
-    UNUSED(completion_event);
     np_error_code ec = NABTO_EC_OK;
 
     if (socket->aborted)
     {
         NABTO_LOG_ERROR(UDP_LOG, "sendto called on an aborted socket.");
-        ec = NABTO_EC_ABORTED;
+        return NABTO_EC_ABORTED;
     }
-    else
+
+    struct pbuf *packet = pbuf_alloc(PBUF_TRANSPORT, buffer_size, PBUF_RAM);
+    if (packet == NULL) {
+        return NABTO_EC_OUT_OF_MEMORY;
+    }
+    memcpy(packet->payload, buffer, buffer_size);
+
+    ip_addr_t ip;
+    nplwip_convertip_np_to_lwip(&ep->ip, &ip);
+
+    LOCK_TCPIP_CORE();
+    err_t lwip_err = udp_sendto(socket->upcb, packet, &ip, ep->port);
+    UNLOCK_TCPIP_CORE();
+    pbuf_free(packet);
+
+    if (lwip_err == ERR_VAL)
     {
-        struct pbuf *packet = pbuf_alloc(PBUF_TRANSPORT, buffer_size, PBUF_RAM);
-        memcpy(packet->payload, buffer, buffer_size);
-
-        ip_addr_t ip;
-        nplwip_convertip_np_to_lwip(&ep->ip, &ip);
-
-        LOCK_TCPIP_CORE();
-        err_t lwip_err = udp_sendto(socket->upcb, packet, &ip, ep->port);
-        UNLOCK_TCPIP_CORE();
-
-        if (lwip_err == ERR_VAL)
-        {
-            // probably because we are sending an ipv6 packet etc
-            ec = NABTO_EC_OK;
-        }
-        else if (lwip_err != ERR_OK)
-        {
-            NABTO_LOG_ERROR(UDP_LOG, "Unknown lwIP error in udp_sendto().");
-            ec = NABTO_EC_UNKNOWN;
-        }
+        // probably because we are sending an ipv6 packet etc
+        return NABTO_EC_OK;
     }
+    else if (lwip_err != ERR_OK)
+    {
+        NABTO_LOG_ERROR(UDP_LOG, "Unknown lwIP error in udp_sendto().");
+        return NABTO_EC_UNKNOWN;
+    }
+    return NABTO_EC_OK;
+}
 
+static void nplwip_async_sendto(struct np_udp_socket *socket, struct np_udp_endpoint *ep,
+                                uint8_t *buffer, uint16_t buffer_size,
+                                struct np_completion_event *completion_event)
+{
+    UNUSED(completion_event);
+    np_error_code ec = nplwip_async_sendto_ec(socket, ep, buffer, buffer_size);
     np_completion_event_resolve(completion_event, ec);
 }
 
