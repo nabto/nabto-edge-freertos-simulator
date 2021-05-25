@@ -190,7 +190,9 @@ static void nplwip_udp_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p,
 
     if (socket->ce)
     {
-        np_completion_event_resolve(socket->ce, NABTO_EC_OK);
+        struct np_completion_event* e = socket->ce;
+        socket->ce = NULL;
+        np_completion_event_resolve(e, NABTO_EC_OK);
     }
 }
 
@@ -232,7 +234,7 @@ static void nplwip_destroy_socket(struct np_udp_socket *socket)
     }
 
     nplwip_abort_socket(socket);
-    
+
     LOCK_TCPIP_CORE();
     udp_remove(socket->upcb);
     vPortFree(socket);
@@ -504,7 +506,7 @@ static void nplwip_tcp_async_write(struct np_tcp_socket *socket, const void *dat
         NABTO_LOG_ERROR(TCP_LOG, "tcp_output failed, lwIP error: %i", error);
         np_completion_event_resolve(completion_event, NABTO_EC_UNKNOWN);
     }
-    
+
     UNLOCK_TCPIP_CORE();
 
     if (error == ERR_OK)
@@ -620,9 +622,10 @@ static void nplwip_publish_service(struct np_mdns *obj, uint16_t port, const cha
 
     // @TODO: Do we need to copy txt_items?
     LOCK_TCPIP_CORE();
-    context->service = mdns_resp_add_service(netif_default, instance_name, "_nabto",
-                                             DNSSD_PROTO_UDP, port, 3600,
-                                             nplwip_serve_txt, txt_items);
+    // TODO
+    // context->service = mdns_resp_add_service(netif_default, instance_name, "_nabto",
+    //                                          DNSSD_PROTO_UDP, port, 3600,
+    //                                          nplwip_serve_txt, txt_items);
     UNLOCK_TCPIP_CORE();
 }
 
@@ -712,4 +715,3 @@ struct np_mdns nplwip_get_mdns_impl()
     obj.data = pvPortMalloc(sizeof(nplwip_mdns_ctx));
     return obj;
 }
-

@@ -10,20 +10,20 @@ option(DEVICE_BUILD_APPS "" OFF)
 
 set(KERNEL_DIR FreeRTOS/Kernel)
 set(LWIP_DIR lwip)
-set(LWIP_CONTRIB_DIR lwip-contrib)
+set(LWIP_CONTRIB_DIR lwip-new/contrib)
 set(NABTO_DIR nabto-embedded-sdk)
 
 add_subdirectory(${NABTO_DIR})
 
 include(${NABTO_DIR}/nabto_primary_files.cmake)
-include(${LWIP_CONTRIB_DIR}/ports/CMakeCommon.cmake)
+#include(${LWIP_CONTRIB_DIR}/ports/CMakeCommon.cmake)
 
 set(SOURCE_FILES
     src/main.c
     src/console.c
     src/coap.c
-    # src/nabto_device_threads_freertos.c
-    ${NABTO_DIR}/src/modules/threads/unix/nabto_device_threads_unix.c
+    src/nabto_device_threads_freertos.c
+    #${NABTO_DIR}/src/modules/threads/unix/nabto_device_threads_unix.c
     src/platform_integration.c
     src/nabto_lwip.c
     src/default_netif.c)
@@ -49,24 +49,31 @@ set(NABTO_SOURCE_FILES
     ${ne_required_src}
     ${ne_api_test_src})
 
-set_property(SOURCE ${SOURCE_FILES} PROPERTY COMPILE_FLAGS "-Wall -Werror -Wextra")
+set_property(SOURCE ${SOURCE_FILES} PROPERTY COMPILE_FLAGS "-Wall -Wextra")
 set_property(SOURCE ${NABTO_DIR}/src/core/nc_version.c PROPERTY GENERATED 1)
 
 set(LWIP_INCLUDE_DIRS
     src
     ${LWIP_DIR}/src/include
     ${LWIP_CONTRIB_DIR}
-    ${LWIP_CONTRIB_DIR}/ports/unix/port/include)
+    lwip-port/include)
 
-include(${LWIP_DIR}/src/Filelists.cmake)
-include(${LWIP_CONTRIB_DIR}/Filelists.cmake)
-include(${LWIP_CONTRIB_DIR}/ports/unix/Filelists.cmake)
+include(lwip/src/Filelists.cmake)
+#include(${LWIP_CONTRIB_DIR}/Filelists.cmake)
+
+
+set(lwip_port_src
+    lwip-port/sys_arch.c
+    lwip-port/sys_arch_unix.c
+    lwip-port/netif/tapif.c
+)
 
 set(EXE nabto_demo)
 add_executable(${EXE}
     ${SOURCE_FILES}
     ${KERNEL_SOURCE_FILES}
-    ${NABTO_SOURCE_FILES})
+    ${NABTO_SOURCE_FILES}
+    ${lwip_port_src})
 
 target_include_directories(${EXE} PUBLIC src)
 target_include_directories(${EXE} SYSTEM PUBLIC ${KERNEL_DIR}/include)
@@ -82,5 +89,4 @@ add_dependencies(${EXE} GENERATE_VERSION)
 target_compile_options(${EXE} PUBLIC -ggdb3 -O0)
 target_compile_definitions(${EXE} PUBLIC projCOVERAGE_TEST=0 _WINDOWS_)
 target_compile_definitions(${EXE} PRIVATE -DMBEDTLS_CONFIG_FILE=<nabto_mbedtls_config.h> ${LWIP_DEFINITIONS} ${LWIP_MBEDTLS_DEFINITIONS})
-target_link_libraries(${EXE} pthread ${LWIP_SANITIZER_LIBS} lwipcontribportunix lwipallapps lwipcore )
-
+target_link_libraries(${EXE} pthread ${LWIP_SANITIZER_LIBS} lwipallapps lwipcore )

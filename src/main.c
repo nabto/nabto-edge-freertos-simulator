@@ -37,13 +37,25 @@
 #include "console.h"
 #include "coap.h"
 
+#include <time.h>
+
 StackType_t uxTimerTaskStack[configTIMER_TASK_STACK_DEPTH];
 uint8_t ucHeap[configTOTAL_HEAP_SIZE];
+
+
 
 static struct
 {
     TaskHandle_t main_loop;
 } globals;
+
+void vApplicationIdleHook()
+{
+    struct timespec req;
+    req.tv_nsec = 0;
+    req.tv_sec = 1;
+    nanosleep(&req, NULL);
+}
 
 static void LWIPStatusCallback(struct netif *state_netif)
 {
@@ -58,11 +70,11 @@ static void LWIPStatusCallback(struct netif *state_netif)
     }
 }
 
-static void
-lwip_mdns_report(struct netif* netif, u8_t result)
-{
-  LWIP_PLATFORM_DIAG(("mdns status[netif %d]: %d\n", netif->num, result));
-}
+// static void
+// lwip_mdns_report(struct netif* netif, u8_t result)
+// {
+//   LWIP_PLATFORM_DIAG(("mdns status[netif %d]: %d\n", netif->num, result));
+// }
 
 static void LWIPInit(void *arg)
 {
@@ -98,39 +110,12 @@ static void LWIPInit(void *arg)
     IP_ADDR4(&dnsserver, 8,8,4,4);
     dns_setserver(1, &dnsserver);
 
-    mdns_resp_register_name_result_cb(lwip_mdns_report);
-    mdns_resp_init();
-    mdns_resp_add_netif(netif_default, "lwip", 3600);
-    mdns_resp_announce(netif_default);
+    //mdns_resp_register_name_result_cb(lwip_mdns_report);
+    //mdns_resp_init();
+    //mdns_resp_add_netif(netif_default, "lwip", 3600);
+    //mdns_resp_announce(netif_default);
 
     sys_sem_signal(init_sem);
-}
-
-void LWIPLoop(void *arg)
-{
-    UNUSED(arg);
-    err_t err;
-    sys_sem_t init_sem;
-
-    err = sys_sem_new(&init_sem, 0);
-    LWIP_ASSERT("failed to create init_sem", err == ERR_OK);
-    LWIP_UNUSED_ARG(err);
-    tcpip_init(LWIPInit, &init_sem);
-    sys_sem_wait(&init_sem);
-    sys_sem_free(&init_sem);
-
-    netconn_thread_init();
-
-    // Let the main thread know LWIP has initialized.
-    xTaskNotifyGive(xTaskGetHandle("MainLoop"));
-
-    for(;;) {
-      default_netif_poll();
-    }
-
-    netconn_thread_cleanup();
-    default_netif_shutdown();
-    vTaskDelete(NULL);
 }
 
 void NabtoMain(void *arg)
@@ -145,19 +130,26 @@ void MainLoop(void *arg)
     UNUSED(arg);
     console_init();
 
-    xTaskCreate(LWIPLoop, "LWIP",
-                configMINIMAL_STACK_SIZE, NULL,
-                configMAX_PRIORITIES-1, NULL);
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    {
+        sys_sem_t init_sem;
+        sys_sem_new(&init_sem, 0);
+        tcpip_init(LWIPInit, &init_sem);
+        sys_sem_wait(&init_sem);
+        sys_sem_free(&init_sem);
+    }
 
     xTaskCreate(NabtoMain, "NabtoMain",
                 configMINIMAL_STACK_SIZE, NULL,
                 configMAX_PRIORITIES-1, NULL);
 
-    for (;;)
-    {
-        vTaskDelay(1000);
-    }
+    // for (;;)
+    // {
+    //      struct timespec req;
+    //      req.tv_nsec = 0;
+    //      req.tv_sec = 1;
+    //      nanosleep(&req, NULL);
+    //     //vTaskDelay(1000);
+    // }
     vTaskDelete(NULL);
 }
 
@@ -212,4 +204,3 @@ void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
     *ppxTimerTaskStackBuffer = uxTimerTaskStack;
     *pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
 }
-
