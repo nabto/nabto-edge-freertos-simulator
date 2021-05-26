@@ -17,7 +17,7 @@ extern void vAssertCalled( const char * const pcFileName,  unsigned long ulLine 
 #define configUSE_TASK_NOTIFICATIONS            1
 #define configTASK_NOTIFICATION_ARRAY_ENTRIES   3
 #define configUSE_MUTEXES                       1
-#define configUSE_RECURSIVE_MUTEXES             0
+#define configUSE_RECURSIVE_MUTEXES             1
 #define configUSE_COUNTING_SEMAPHORES           1
 #define configUSE_ALTERNATIVE_API               0 /* Deprecated! */
 #define configQUEUE_REGISTRY_SIZE               10
@@ -36,7 +36,7 @@ extern void vAssertCalled( const char * const pcFileName,  unsigned long ulLine 
 #define configAPPLICATION_ALLOCATED_HEAP        1
 
 /* Hook function related definitions. */
-#define configUSE_IDLE_HOOK                     0
+#define configUSE_IDLE_HOOK                     1
 #define configUSE_TICK_HOOK                     0
 #define configCHECK_FOR_STACK_OVERFLOW          0
 #define configUSE_MALLOC_FAILED_HOOK            0
@@ -151,4 +151,3 @@ ipconfigUSE_DNS is set to 1 but a DNS server cannot be contacted. */
 
 
 #endif // FREERTOS_CONFIG_H
-

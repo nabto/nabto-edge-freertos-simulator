@@ -137,6 +137,14 @@ static void nplwip_async_resolve(struct np_dns *obj, const char *host,
     switch (Error)
     {
         case ERR_OK:
+        {
+            NABTO_LOG_INFO(DNS_LOG, "DNS resolved %s to %s", host, ipaddr_ntoa(&resolved));
+            vPortFree(event);
+            *ips_resolved = 1;
+            nplwip_convertip_lwip_to_np(&resolved, &ips[0]);
+            np_completion_event_resolve(completion_event, NABTO_EC_OK);
+            break;
+        }
         case ERR_INPROGRESS:
         {
             // We can log something here if we want to.
@@ -190,7 +198,9 @@ static void nplwip_udp_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p,
 
     if (socket->ce)
     {
-        np_completion_event_resolve(socket->ce, NABTO_EC_OK);
+        struct np_completion_event* e = socket->ce;
+        socket->ce = NULL;
+        np_completion_event_resolve(e, NABTO_EC_OK);
     }
 }
 
@@ -232,7 +242,7 @@ static void nplwip_destroy_socket(struct np_udp_socket *socket)
     }
 
     nplwip_abort_socket(socket);
-    
+
     LOCK_TCPIP_CORE();
     udp_remove(socket->upcb);
     vPortFree(socket);
@@ -268,37 +278,50 @@ static void nplwip_async_bind_port(struct np_udp_socket *socket, uint16_t port,
     np_completion_event_resolve(completion_event, ec);
 }
 
-static void nplwip_async_sendto(struct np_udp_socket *socket, struct np_udp_endpoint *ep,
-                                uint8_t *buffer, uint16_t buffer_size,
-                                struct np_completion_event *completion_event)
+static np_error_code nplwip_async_sendto_ec(struct np_udp_socket *socket, struct np_udp_endpoint *ep,
+                                   uint8_t *buffer, uint16_t buffer_size)
 {
-    UNUSED(completion_event);
     np_error_code ec = NABTO_EC_OK;
 
     if (socket->aborted)
     {
         NABTO_LOG_ERROR(UDP_LOG, "sendto called on an aborted socket.");
-        ec = NABTO_EC_ABORTED;
+        return NABTO_EC_ABORTED;
     }
-    else
+
+    struct pbuf *packet = pbuf_alloc(PBUF_TRANSPORT, buffer_size, PBUF_RAM);
+    if (packet == NULL) {
+        return NABTO_EC_OUT_OF_MEMORY;
+    }
+    memcpy(packet->payload, buffer, buffer_size);
+
+    ip_addr_t ip;
+    nplwip_convertip_np_to_lwip(&ep->ip, &ip);
+
+    LOCK_TCPIP_CORE();
+    err_t lwip_err = udp_sendto(socket->upcb, packet, &ip, ep->port);
+    UNLOCK_TCPIP_CORE();
+    pbuf_free(packet);
+
+    if (lwip_err == ERR_VAL)
     {
-        struct pbuf *packet = pbuf_alloc(PBUF_TRANSPORT, buffer_size, PBUF_RAM);
-        memcpy(packet->payload, buffer, buffer_size);
-
-        ip_addr_t ip;
-        nplwip_convertip_np_to_lwip(&ep->ip, &ip);
-
-        LOCK_TCPIP_CORE();
-        err_t lwip_err = udp_sendto(socket->upcb, packet, &ip, ep->port);
-        UNLOCK_TCPIP_CORE();
-
-        if (lwip_err != ERR_OK)
-        {
-            NABTO_LOG_ERROR(UDP_LOG, "Unknown lwIP error in udp_sendto().");
-            ec = NABTO_EC_UNKNOWN;
-        }
+        // probably because we are sending an ipv6 packet etc
+        return NABTO_EC_OK;
     }
+    else if (lwip_err != ERR_OK)
+    {
+        NABTO_LOG_ERROR(UDP_LOG, "Unknown lwIP error in udp_sendto().");
+        return NABTO_EC_UNKNOWN;
+    }
+    return NABTO_EC_OK;
+}
 
+static void nplwip_async_sendto(struct np_udp_socket *socket, struct np_udp_endpoint *ep,
+                                uint8_t *buffer, uint16_t buffer_size,
+                                struct np_completion_event *completion_event)
+{
+    UNUSED(completion_event);
+    np_error_code ec = nplwip_async_sendto_ec(socket, ep, buffer, buffer_size);
     np_completion_event_resolve(completion_event, ec);
 }
 
@@ -504,7 +527,7 @@ static void nplwip_tcp_async_write(struct np_tcp_socket *socket, const void *dat
         NABTO_LOG_ERROR(TCP_LOG, "tcp_output failed, lwIP error: %i", error);
         np_completion_event_resolve(completion_event, NABTO_EC_UNKNOWN);
     }
-    
+
     UNLOCK_TCPIP_CORE();
 
     if (error == ERR_OK)
@@ -620,9 +643,10 @@ static void nplwip_publish_service(struct np_mdns *obj, uint16_t port, const cha
 
     // @TODO: Do we need to copy txt_items?
     LOCK_TCPIP_CORE();
-    context->service = mdns_resp_add_service(netif_default, instance_name, "_nabto",
-                                             DNSSD_PROTO_UDP, port, 3600,
-                                             nplwip_serve_txt, txt_items);
+    // TODO
+    // context->service = mdns_resp_add_service(netif_default, instance_name, "_nabto",
+    //                                          DNSSD_PROTO_UDP, port, 3600,
+    //                                          nplwip_serve_txt, txt_items);
     UNLOCK_TCPIP_CORE();
 }
 
@@ -712,4 +736,3 @@ struct np_mdns nplwip_get_mdns_impl()
     obj.data = pvPortMalloc(sizeof(nplwip_mdns_ctx));
     return obj;
 }
-
