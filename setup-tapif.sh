@@ -1,14 +1,16 @@
 #!/bin/bash
 
-export PRECONFIGURED_TAPIF=tap0
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
-sudo ip tuntap add dev $PRECONFIGURED_TAPIF mode tap user `whoami`
-sudo ip link set $PRECONFIGURED_TAPIF up
-sudo brctl addbr lwipbridge
-sudo brctl addif lwipbridge $PRECONFIGURED_TAPIF
-sudo ip addr add 192.168.1.1/24 dev lwipbridge
-sudo ip link set dev lwipbridge up
+sudo ip tuntap add dev tap0 mode tap user `whoami`
+sudo ip link set dev tap0 up
+sudo ip addr add 192.168.1.1/24 dev tap0
 
-sudo iptables -P FORWARD ACCEPT
 sudo sysctl -w net.ipv4.ip_forward=1
-sudo iptables -t nat -A POSTROUTING -j MASQUERADE
+
+sudo nft --version 2>&1 > /dev/null
+if [ $? -ne 0 ]; then
+  echo "missing nft executable, install the nftables package"
+else
+  sudo ${SCRIPT_DIR}/firewall.nft
+fi

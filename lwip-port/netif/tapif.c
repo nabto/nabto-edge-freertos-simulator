@@ -84,16 +84,10 @@
 #ifndef DEVTAP
 #define DEVTAP "/dev/net/tun"
 #endif
-#define NETMASK_ARGS "netmask %d.%d.%d.%d"
-#define IFCONFIG_ARGS "tap0 inet %d.%d.%d.%d " NETMASK_ARGS
 #elif defined(LWIP_UNIX_OPENBSD)
 #define DEVTAP "/dev/tun0"
-#define NETMASK_ARGS "netmask %d.%d.%d.%d"
-#define IFCONFIG_ARGS "tun0 inet %d.%d.%d.%d " NETMASK_ARGS " link0"
 #else /* others */
 #define DEVTAP "/dev/tap0"
-#define NETMASK_ARGS "netmask %d.%d.%d.%d"
-#define IFCONFIG_ARGS "tap0 inet %d.%d.%d.%d " NETMASK_ARGS
 #endif
 
 /* Define those to better describe your network interface. */
@@ -128,7 +122,6 @@ low_level_init(struct netif *netif)
   int ret;
   char buf[1024];
 #endif /* LWIP_IPV4 */
-  char *preconfigured_tapif = getenv("PRECONFIGURED_TAPIF");
 
   tapif = (struct tapif *)netif->state;
 
@@ -162,11 +155,7 @@ low_level_init(struct netif *netif)
     struct ifreq ifr;
     memset(&ifr, 0, sizeof(ifr));
 
-    if (preconfigured_tapif) {
-      strncpy(ifr.ifr_name, preconfigured_tapif, sizeof(ifr.ifr_name));
-    } else {
-      strncpy(ifr.ifr_name, DEVTAP_DEFAULT_IF, sizeof(ifr.ifr_name));
-    }
+    strncpy(ifr.ifr_name, DEVTAP_DEFAULT_IF, sizeof(ifr.ifr_name));
     ifr.ifr_name[sizeof(ifr.ifr_name)-1] = 0; /* ensure \0 termination */
 
     ifr.ifr_flags = IFF_TAP|IFF_NO_PI;
@@ -307,6 +296,7 @@ tapif_input(struct netif *netif)
     // queue full
     pbuf_free(p);
   }
+
 }
 /*-----------------------------------------------------------------------------------*/
 /*

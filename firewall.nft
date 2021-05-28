@@ -10,6 +10,6 @@ table ip nat {
 	# for all packets to WAN, after routing, replace source address with primary IP of WAN interface
 	chain postrouting {
 		type nat hook postrouting priority 100; policy accept;
-		oifname "eth0" masquerade
+		masquerade
 	}
 }

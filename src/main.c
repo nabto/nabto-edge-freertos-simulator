@@ -17,6 +17,7 @@
 #include "lwip/etharp.h"
 #include "lwip/dns.h"
 #include "lwip/udp.h"
+#include "lwip/dhcp.h"
 #include "lwip/apps/mdns.h"
 #include "netif/ethernet.h"
 
@@ -99,11 +100,14 @@ static void LWIPInit(void *arg)
     init_default_netif(&ipaddr, &netmask, &gw);
     netif_create_ip6_linklocal_address(netif_default, 1);
 
+
+
     console_print("Starting lwIP, local interface IP is %s\n", ip4addr_ntoa(&ipaddr));
     console_print("ip6 linklocal address: %s\n", ip6addr_ntoa(netif_ip6_addr(netif_default, 0)));
 
     netif_set_status_callback(netif_default, LWIPStatusCallback);
     netif_set_up(netif_default);
+    //dhcp_start(netif_default);
 
     // @TODO: Using google dns for now, should probably be exposed as an option instead.
     ip_addr_t dnsserver;

@@ -6,8 +6,8 @@
 
 #include "console.h"
 
-#define PRODUCT_ID ""
-#define DEVICE_ID ""
+#define PRODUCT_ID "pr-9fbbczma"
+#define DEVICE_ID "de-xb3mixgy"
 
 const char* keyFile = "device.key";
 
@@ -142,6 +142,8 @@ bool start_device(NabtoDevice* device, const char* productId, const char* device
     {
         return false;
     }
+
+    nabto_device_set_log_level(device, "trace");
 
     NabtoDeviceFuture* fut = nabto_device_future_new(device);
     nabto_device_start(device, fut);

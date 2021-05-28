@@ -66,6 +66,7 @@ set(lwip_port_src
     lwip-port/sys_arch.c
     lwip-port/sys_arch_unix.c
     lwip-port/netif/tapif.c
+    lwip-port/netif/pcapif.c
 )
 
 set(EXE nabto_demo)
@@ -89,4 +90,4 @@ add_dependencies(${EXE} GENERATE_VERSION)
 target_compile_options(${EXE} PUBLIC -ggdb3 -O0)
 target_compile_definitions(${EXE} PUBLIC projCOVERAGE_TEST=0 _WINDOWS_)
 target_compile_definitions(${EXE} PRIVATE -DMBEDTLS_CONFIG_FILE=<nabto_mbedtls_config.h> ${LWIP_DEFINITIONS} ${LWIP_MBEDTLS_DEFINITIONS})
-target_link_libraries(${EXE} pthread ${LWIP_SANITIZER_LIBS} lwipallapps lwipcore )
+target_link_libraries(${EXE} pthread ${LWIP_SANITIZER_LIBS} lwipallapps lwipcore pcap)

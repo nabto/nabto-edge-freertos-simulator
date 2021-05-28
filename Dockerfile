@@ -1,6 +1,6 @@
 FROM debian:buster
 
-RUN apt-get update && apt-get install -y build-essential iptables cmake git bridge-utils net-tools vim tcpdump gdb isc-dhcp-client
+RUN apt-get update && apt-get install -y build-essential iptables cmake git bridge-utils net-tools vim tcpdump gdb isc-dhcp-client libpcap-dev
 
 ARG USERNAME=vscode
 ARG USER_UID=1000

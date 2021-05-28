@@ -1,8 +1,10 @@
+#include "lwipcfg.h"
 #include "lwip/opt.h"
 #include "lwip/netif.h"
 #include "lwip/ip_addr.h"
 #include "lwip/tcpip.h"
 #include "netif/tapif.h"
+#include "netif/pcapif.h"
 
 #include "default_netif.h"
 
@@ -16,10 +18,12 @@ void init_default_netif(const ip4_addr_t *ipaddr, const ip4_addr_t *netmask, con
 void init_default_netif(void)
 #endif
 {
-#if NO_SYS
-    netif_add(&netif, NETIF_ADDRS, NULL, tapif_init, netif_input);
-#else
+#if USE_TAPIF
     netif_add(&netif, NETIF_ADDRS, NULL, tapif_init, tcpip_input);
+#elif USE_PCAPIF
+    netif_add(&netif, NETIF_ADDRS, NULL, pcapif_init, tcpip_input);
+#else
+#error use either TAPIF or PCAPIF
 #endif
     netif_set_default(&netif);
 }
