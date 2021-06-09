@@ -10,7 +10,6 @@ option(DEVICE_BUILD_APPS "" OFF)
 
 set(KERNEL_DIR FreeRTOS/Kernel)
 set(LWIP_DIR lwip)
-set(LWIP_CONTRIB_DIR lwip-new/contrib)
 set(NABTO_DIR nabto-embedded-sdk)
 
 add_subdirectory(${NABTO_DIR})
@@ -55,12 +54,9 @@ set_property(SOURCE ${NABTO_DIR}/src/core/nc_version.c PROPERTY GENERATED 1)
 set(LWIP_INCLUDE_DIRS
     src
     ${LWIP_DIR}/src/include
-    ${LWIP_CONTRIB_DIR}
     lwip-port/include)
 
 include(lwip/src/Filelists.cmake)
-#include(${LWIP_CONTRIB_DIR}/Filelists.cmake)
-
 
 set(lwip_port_src
     lwip-port/sys_arch.c
