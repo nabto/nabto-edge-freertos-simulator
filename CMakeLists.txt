@@ -17,17 +17,22 @@ add_subdirectory(${NABTO_DIR})
 include(${NABTO_DIR}/nabto_primary_files.cmake)
 #include(${LWIP_CONTRIB_DIR}/ports/CMakeCommon.cmake)
 
-set(SOURCE_FILES
-    src/main.c
+set(demo_src
+demo/coap.c
+demo/main.c
+)
+
+set(port_src
     src/console.c
-    src/coap.c
     src/nabto_device_threads_freertos.c
     #${NABTO_DIR}/src/modules/threads/unix/nabto_device_threads_unix.c
     src/platform_integration.c
     src/nabto_lwip.c
-    src/default_netif.c)
+    src/default_netif.c
+    src/freertos_port.c
+    src/lwip_port_init.c)
 
-set(KERNEL_SOURCE_FILES
+set(freertos_kernel_src
     ${KERNEL_DIR}/croutine.c
     ${KERNEL_DIR}/event_groups.c
     ${KERNEL_DIR}/list.c
@@ -39,7 +44,7 @@ set(KERNEL_SOURCE_FILES
     ${KERNEL_DIR}/portable/ThirdParty/GCC/Posix/utils/wait_for_event.c
     ${KERNEL_DIR}/portable/ThirdParty/GCC/Posix/port.c)
 
-set(NABTO_SOURCE_FILES
+set(nabto_src
     ${NABTO_DIR}/src/api_test/nabto_device_test_threads.c
     ${NABTO_DIR}/src/api/nabto_device_error.c
     ${NABTO_DIR}/src/modules/event_queue/thread_event_queue.c
@@ -65,25 +70,33 @@ set(lwip_port_src
     lwip-port/netif/pcapif.c
 )
 
-set(EXE nabto_demo)
-add_executable(${EXE}
-    ${SOURCE_FILES}
-    ${KERNEL_SOURCE_FILES}
-    ${NABTO_SOURCE_FILES}
-    ${lwip_port_src})
+add_library(lwip_port ${lwip_port_src})
+target_include_directories(lwip_port PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(lwip_port PUBLIC ${LWIP_INCLUDE_DIRS})
+target_include_directories(lwip_port PUBLIC ${KERNEL_DIR}/include)
+target_include_directories(lwip_port PUBLIC ${KERNEL_DIR}/portable/ThirdParty/GCC/Posix)
+target_include_directories(lwip_port PUBLIC ${KERNEL_DIR}/portable/ThirdParty/GCC/Posix/utils)
+target_link_libraries(lwip_port lwipcore)
 
-target_include_directories(${EXE} PUBLIC src)
-target_include_directories(${EXE} SYSTEM PUBLIC ${KERNEL_DIR}/include)
-target_include_directories(${EXE} SYSTEM PUBLIC ${KERNEL_DIR}/portable/ThirdParty/GCC/Posix)
-target_include_directories(${EXE} SYSTEM PUBLIC ${KERNEL_DIR}/portable/ThirdParty/GCC/Posix/utils)
-target_include_directories(${EXE} PRIVATE ${LWIP_INCLUDE_DIRS})
-target_include_directories(${EXE} SYSTEM PUBLIC ${NABTO_DIR}/include)
-target_include_directories(${EXE} SYSTEM PUBLIC ${NABTO_DIR}/src)
-target_include_directories(${EXE} SYSTEM PRIVATE ${ne_priv_include_dirs})
-target_include_directories(${EXE} SYSTEM PRIVATE ${NABTO_DIR})
 
-add_dependencies(${EXE} GENERATE_VERSION)
-target_compile_options(${EXE} PUBLIC -ggdb3 -O0)
-target_compile_definitions(${EXE} PUBLIC projCOVERAGE_TEST=0 _WINDOWS_)
-target_compile_definitions(${EXE} PRIVATE -DMBEDTLS_CONFIG_FILE=<nabto_mbedtls_config.h> ${LWIP_DEFINITIONS} ${LWIP_MBEDTLS_DEFINITIONS})
-target_link_libraries(${EXE} pthread ${LWIP_SANITIZER_LIBS} lwipallapps lwipcore pcap)
+add_library(nabto_freertos_lwip_simulator ${freertos_kernel_src} ${nabto_src} ${lwip_src} ${port_src})
+target_include_directories(nabto_freertos_lwip_simulator PUBLIC src)
+target_include_directories(nabto_freertos_lwip_simulator SYSTEM PUBLIC ${KERNEL_DIR}/include)
+target_include_directories(nabto_freertos_lwip_simulator SYSTEM PUBLIC ${KERNEL_DIR}/portable/ThirdParty/GCC/Posix)
+target_include_directories(nabto_freertos_lwip_simulator SYSTEM PUBLIC ${KERNEL_DIR}/portable/ThirdParty/GCC/Posix/utils)
+target_include_directories(nabto_freertos_lwip_simulator PRIVATE ${LWIP_INCLUDE_DIRS})
+target_include_directories(nabto_freertos_lwip_simulator SYSTEM PUBLIC ${NABTO_DIR}/include)
+target_include_directories(nabto_freertos_lwip_simulator SYSTEM PUBLIC ${NABTO_DIR}/src)
+target_include_directories(nabto_freertos_lwip_simulator SYSTEM PRIVATE ${ne_priv_include_dirs})
+target_include_directories(nabto_freertos_lwip_simulator SYSTEM PRIVATE ${NABTO_DIR})
+target_link_libraries(nabto_freertos_lwip_simulator ${LWIP_SANITIZER_LIBS} lwipallapps lwipcore pthread lwip_port)
+target_compile_definitions(nabto_freertos_lwip_simulator PRIVATE -DMBEDTLS_CONFIG_FILE=<nabto_mbedtls_config.h> ${LWIP_DEFINITIONS} ${LWIP_MBEDTLS_DEFINITIONS})
+
+add_executable(simple_coap ${demo_src})
+target_link_libraries(simple_coap nabto_freertos_lwip_simulator )
+target_include_directories(simple_coap PUBLIC demo)
+target_include_directories(simple_coap PUBLIC ${NABTO_DIR})
+
+add_dependencies(nabto_freertos_lwip_simulator GENERATE_VERSION)
+target_compile_options(simple_coap PUBLIC -ggdb3 -O0)
+target_compile_definitions(simple_coap PUBLIC projCOVERAGE_TEST=0 _WINDOWS_)

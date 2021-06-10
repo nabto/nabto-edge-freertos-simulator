@@ -5,11 +5,10 @@
 #include <semphr.h>
 
 static SemaphoreHandle_t m_stdio_mutex;
-static StaticSemaphore_t m_stdio_mutex_buffer;
 
 void console_init(void)
 {
-    m_stdio_mutex = xSemaphoreCreateMutexStatic(&m_stdio_mutex_buffer);
+    m_stdio_mutex = xSemaphoreCreateMutex();
 }
 
 void console_print(const char *fmt, ...)

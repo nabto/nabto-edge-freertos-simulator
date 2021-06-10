@@ -10,19 +10,19 @@ struct nabto_device_thread
     TaskHandle_t task;
     void *(*function)(void*);
     void *user_data;
-    StaticSemaphore_t join_barrier;
-    StaticSemaphore_t join_mutex;
+    SemaphoreHandle_t join_barrier;
+    SemaphoreHandle_t join_mutex;
 };
 
 struct nabto_device_mutex
 {
-    StaticSemaphore_t mutex;
+    SemaphoreHandle_t mutex;
 };
 
 struct nabto_device_condition
 {
     BaseType_t is_initialized;
-    StaticSemaphore_t semaphore;
+    SemaphoreHandle_t semaphore;
     unsigned waiting_threads;
 };
 
@@ -52,9 +52,9 @@ struct nabto_device_mutex* nabto_device_threads_create_mutex()
     struct nabto_device_mutex *mut = pvPortMalloc(sizeof(*mut));
     if (mut)
     {
-        xSemaphoreCreateMutexStatic(&mut->mutex); 
+        mut->mutex = xSemaphoreCreateMutex();
     }
-    
+
     return mut;
 }
 
@@ -67,7 +67,7 @@ struct nabto_device_condition *nabto_device_threads_create_condition()
     }
 
     cond->is_initialized = pdTRUE;
-    xSemaphoreCreateCountingStatic(INT_MAX, 0U, &cond->semaphore);
+    cond->semaphore = xSemaphoreCreateCounting(INT_MAX, 0U);
     cond->waiting_threads = 0;
     return cond;
 }
@@ -97,13 +97,13 @@ void nabto_device_threads_join(struct nabto_device_thread *thread)
 
         // Wait for joining thread to finish
         xSemaphoreTake((SemaphoreHandle_t)&thread->join_barrier, portMAX_DELAY);
-        
+
         // Suspend all tasks while cleaning up this thread.
         vTaskSuspendAll();
         {
             xSemaphoreGive((SemaphoreHandle_t)&thread->join_barrier);
             vSemaphoreDelete((SemaphoreHandle_t)&thread->join_barrier);
-            
+
             xSemaphoreGive((SemaphoreHandle_t)&thread->join_mutex);
             vSemaphoreDelete((SemaphoreHandle_t)&thread->join_mutex);
 
@@ -117,8 +117,8 @@ np_error_code nabto_device_threads_run(struct nabto_device_thread* thread, void 
 {
     thread->function = run_routine;
     thread->user_data = data;
-    xSemaphoreCreateMutexStatic(&thread->join_mutex);
-    xSemaphoreCreateBinaryStatic(&thread->join_barrier);
+    thread->join_mutex = xSemaphoreCreateMutex();
+    thread->join_barrier = xSemaphoreCreateBinary();
 
     // @TODO: Give more stack size than configMINIMAL_STACK_SIZE (which could be very small)?
     BaseType_t task_create_error = xTaskCreate(NabtoThreadTask,
@@ -207,4 +207,3 @@ void nabto_device_threads_cond_wait(struct nabto_device_condition *cond,
 {
     nabto_device_threads_cond_timed_wait(cond, mut, 0);
 }
-
