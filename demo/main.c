@@ -24,33 +24,36 @@
 
 #include <time.h>
 
+static const char* productId;
+static const char* deviceId;
+
 void NabtoMain(void *arg)
 {
     UNUSED(arg);
-    nabto_coap();
+    nabto_coap(productId, deviceId);
     vTaskDelete(NULL);
 }
 
-void MainLoop(void *arg)
+int main(int argc, const char* argv[])
 {
-    UNUSED(arg);
-    console_init();
+    if (argc != 3) {
+        printf("usage %s <productid> <deviceid>\n", argv[0]);
+        return 1;
+    }
 
+    productId = argv[1];
+    deviceId = argv[2];
+
+    // init FreeRTOS and LwIP
+    console_init();
     lwip_port_init();
 
+    // Create the nabto coap task.
     xTaskCreate(NabtoMain, "NabtoMain",
                 configMINIMAL_STACK_SIZE, NULL,
                 configMAX_PRIORITIES-1, NULL);
 
-    vTaskDelete(NULL);
-}
-
-int main(void)
-{
-    xTaskCreate(MainLoop, "MainLoop",
-                configMINIMAL_STACK_SIZE, NULL,
-                configMAX_PRIORITIES-1, NULL);
-
+    // Run the freertos scheduler.
     vTaskStartScheduler();
     return 0;
 }

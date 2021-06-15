@@ -6,9 +6,6 @@
 
 #include "console.h"
 
-#define PRODUCT_ID "pr-9fbbczma"
-#define DEVICE_ID "de-xb3mixgy"
-
 const char* keyFile = "device.key";
 
 const char* coapPath[] = { "hello-world", NULL };
@@ -28,10 +25,7 @@ void signal_handler(int s);
 
 NabtoDevice* device_;
 
-int nabto_coap(void) {
-    char* productId = PRODUCT_ID;
-    char* deviceId = DEVICE_ID;
-
+int nabto_coap(const char* productId, const char* deviceId) {
     struct context ctx;
 
     console_print("Nabto Embedded SDK Version %s\n", nabto_device_version());
@@ -143,7 +137,15 @@ bool start_device(NabtoDevice* device, const char* productId, const char* device
         return false;
     }
 
-    nabto_device_set_log_level(device, "trace");
+    const char* logLevel = getenv("NABTO_LOG_LEVEL");
+
+    if (logLevel != NULL) {
+        ec = nabto_device_set_log_level(device, logLevel);
+        if (ec != NABTO_DEVICE_EC_OK) {
+            console_print("Invalid loglevel in environment variable NABTO_LOG_LEVEL %s\n", logLevel);
+            return false;
+        }
+    }
 
     NabtoDeviceFuture* fut = nabto_device_future_new(device);
     nabto_device_start(device, fut);
