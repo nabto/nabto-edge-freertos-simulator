@@ -81,3 +81,15 @@ This is most likely not going to work for an explanation read the [VirtualBox
 notes](https://www.virtualbox.org/manual/ch06.html#network_bridged). TLDR:
 Multiple macs sending on a single wifi interface in client mode is not a good
 idea.
+
+### mDNS inside docker container
+
+If the demo app is running inside a docker container mdns discovery is not
+working outside the container.
+
+### mDNS
+
+mDNS only works on the local machine if the simulator is not running inside a
+container and the mDNS client is also running on the local machine, due to
+multicast on the tap interface not being routed to the primary network
+interface.

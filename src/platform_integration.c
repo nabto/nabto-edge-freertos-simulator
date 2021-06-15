@@ -1,5 +1,5 @@
-#include <FreeRTOS.h>
-#include <task.h>
+#include "FreeRTOS.h"
+#include "task.h"
 
 #include <platform/interfaces/np_timestamp.h>
 #include <api/nabto_device_platform.h>
@@ -9,7 +9,7 @@
 
 #include "common.h"
 #include "nabto_lwip.h"
-#include "mdns_lwip/nm_mdns_lwip.h"
+#include "nabto_mdns_lwip/nm_mdns_lwip.h"
 #include "default_netif.h"
 
 

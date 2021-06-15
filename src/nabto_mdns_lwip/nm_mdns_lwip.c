@@ -20,15 +20,18 @@ static const ip_addr_t v4group = DNS_MQUERY_IPV4_GROUP_INIT;
 static const ip_addr_t v6group = DNS_MQUERY_IPV6_GROUP_INIT;
 #endif
 
+static const uint16_t mdnsPort = 5353;
+
 static void leave_groups(struct netif* netif);
 static np_error_code join_groups(struct netif* netif);
-static void send_packet(struct nm_mdns_lwip* ctx, uint16_t id, bool unicastResponse, const ip_addr_t* dstIp, const uint16_t dstPort,
+static void send_packet(struct nm_mdns_lwip* ctx, uint16_t id, bool unicastResponse, bool goodbye, const ip_addr_t* dstIp, const uint16_t dstPort,
                  struct netif* netif);
 static void start_recv(struct nm_mdns_lwip* ctx);
 static void update_local_ips(struct nm_mdns_lwip* mdns);
 
 static void publish_service(struct np_mdns* obj, uint16_t port, const char* instanceName, struct nn_string_set* subtypes, struct nn_string_map* txtItems);
 static void unpublish_service(struct np_mdns* obj);
+static void announce(struct nm_mdns_lwip* ctx, bool goodbye);
 
 
 static struct np_mdns_functions module = {
@@ -142,13 +145,13 @@ void packet_received(void* userData, struct udp_pcb* pcb, struct pbuf* p,
             if (port != 5353) {
                 unicastResponse = true;
             }
-            send_packet(ctx, id, unicastResponse, addr, port, recv_netif);
+            send_packet(ctx, id, unicastResponse, false /*goodbye*/, addr, port, recv_netif);
         }
     }
     start_recv(ctx);
 }
 
-void send_packet(struct nm_mdns_lwip* ctx, uint16_t id, bool unicastResponse, const ip_addr_t* dstIp, const uint16_t dstPort,
+void send_packet(struct nm_mdns_lwip* ctx, uint16_t id, bool unicastResponse, bool goodbye, const ip_addr_t* dstIp, const uint16_t dstPort,
                  struct netif* netif)
 {
     uint16_t port = ctx->port;
@@ -205,9 +208,19 @@ void publish_service(struct np_mdns* obj, uint16_t port, const char* instanceNam
 
     ctx->port = port;
     nabto_mdns_server_update_info(&ctx->mdnsServer, instanceName, subtypes, txtItems);
+    announce(ctx, false);
 }
 
 void unpublish_service(struct np_mdns* obj)
 {
     // do nothing
+}
+
+void announce(struct nm_mdns_lwip* ctx, bool goodbye)
+{
+    struct netif* netif;
+    NN_LLIST_FOREACH(netif, &ctx->netifList) {
+        send_packet(ctx, 0, false /*unicast response*/, goodbye, &v4group, mdnsPort, netif);
+        send_packet(ctx, 0, false /*unicast response*/, goodbye, &v6group, mdnsPort, netif);
+    }
 }

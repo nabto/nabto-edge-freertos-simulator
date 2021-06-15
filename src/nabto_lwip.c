@@ -119,7 +119,7 @@ static void nplwip_async_resolve(struct np_dns *obj, const char *host,
                                  int addr_type)
 {
     UNUSED(obj);
-    dns_resolve_event *event = pvPortMalloc(sizeof *event);
+    dns_resolve_event *event = malloc(sizeof *event);
     event->ips_size = ips_size;
     event->ips_resolved = ips_resolved;
     event->ips = ips;
@@ -139,7 +139,7 @@ static void nplwip_async_resolve(struct np_dns *obj, const char *host,
         case ERR_OK:
         {
             NABTO_LOG_INFO(DNS_LOG, "DNS resolved %s to %s", host, ipaddr_ntoa(&resolved));
-            vPortFree(event);
+            free(event);
             *ips_resolved = 1;
             nplwip_convertip_lwip_to_np(&resolved, &ips[0]);
             np_completion_event_resolve(completion_event, NABTO_EC_OK);
@@ -208,7 +208,7 @@ static np_error_code nplwip_create_socket(struct np_udp *obj, struct np_udp_sock
 {
     UNUSED(obj);
 
-    struct np_udp_socket *socket = pvPortMalloc(sizeof(struct np_udp_socket));
+    struct np_udp_socket *socket = malloc(sizeof(struct np_udp_socket));
     if (socket == NULL)
     {
         return NABTO_EC_OUT_OF_MEMORY;
@@ -218,7 +218,7 @@ static np_error_code nplwip_create_socket(struct np_udp *obj, struct np_udp_sock
     socket->upcb = udp_new_ip_type(IPADDR_TYPE_ANY);
     UNLOCK_TCPIP_CORE();
     if (socket->upcb == NULL) {
-        vPortFree(socket);
+        free(socket);
         return NABTO_EC_OUT_OF_MEMORY;
     }
 
@@ -249,7 +249,7 @@ static void nplwip_destroy_socket(struct np_udp_socket *socket)
 
     LOCK_TCPIP_CORE();
     udp_remove(socket->upcb);
-    vPortFree(socket);
+    free(socket);
     UNLOCK_TCPIP_CORE();
 }
 
@@ -440,7 +440,7 @@ static err_t nplwip_tcp_recv_callback(void *arg, struct tcp_pcb *tpcb, struct pb
 static np_error_code nplwip_tcp_create(struct np_tcp *obj, struct np_tcp_socket **out_socket)
 {
     UNUSED(obj);
-    struct np_tcp_socket *socket = pvPortMalloc(sizeof(struct np_tcp_socket));
+    struct np_tcp_socket *socket = malloc(sizeof(struct np_tcp_socket));
     if (socket == NULL)
     {
         return NABTO_EC_OUT_OF_MEMORY;
@@ -489,7 +489,7 @@ static void nplwip_tcp_destroy(struct np_tcp_socket *socket)
         // @TODO: We need to wait and try to close again in the acknowledgement callback.
     }
 
-    vPortFree(socket);
+    free(socket);
 }
 
 static void nplwip_tcp_async_connect(struct np_tcp_socket *socket, struct np_ip_address *addr, uint16_t port,
@@ -588,6 +588,7 @@ static size_t nplwip_get_local_ips(struct np_local_ip *obj, struct np_ip_address
     {
         struct netif *netif = get_default_netif();
         const ip_addr_t *ip = netif_ip_addr4(netif);
+        const ip_addr_t *ipv6 = netif_ip_addr6(netif, 0);
         nplwip_convertip_lwip_to_np(ip, addrs);
         return 1;
     }

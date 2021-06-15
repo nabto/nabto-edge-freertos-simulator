@@ -30,7 +30,7 @@ set(port_src
 
     src/default_netif.c
     src/lwip_port_init.c
-    src/mdns_lwip/nm_mdns_lwip.c
+    src/nabto_mdns_lwip/nm_mdns_lwip.c
     )
 
 set(freertos_kernel_src
@@ -97,11 +97,9 @@ target_include_directories(nabto_freertos_lwip_simulator SYSTEM PRIVATE ${NABTO_
 target_link_libraries(nabto_freertos_lwip_simulator pthread)
 target_compile_definitions(nabto_freertos_lwip_simulator PRIVATE -DMBEDTLS_CONFIG_FILE=<nabto_mbedtls_config.h> ${LWIP_DEFINITIONS} ${LWIP_MBEDTLS_DEFINITIONS})
 
+add_dependencies(nabto_freertos_lwip_simulator GENERATE_VERSION)
+
 add_executable(simple_coap ${demo_src})
 target_link_libraries(simple_coap nabto_freertos_lwip_simulator )
 target_include_directories(simple_coap PUBLIC demo)
 target_include_directories(simple_coap PUBLIC ${NABTO_DIR})
-
-add_dependencies(nabto_freertos_lwip_simulator GENERATE_VERSION)
-target_compile_options(simple_coap PUBLIC -ggdb3 -O0)
-target_compile_definitions(simple_coap PUBLIC projCOVERAGE_TEST=0 _WINDOWS_)
