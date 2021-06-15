@@ -17,9 +17,12 @@ add_subdirectory(${NABTO_DIR})
 include(${NABTO_DIR}/nabto_primary_files.cmake)
 #include(${LWIP_CONTRIB_DIR}/ports/CMakeCommon.cmake)
 
-set(demo_src
-    demo/coap.c
-    demo/main.c
+set(simple_coap_demo_src
+    demo/simple_coap/simple_coap_device.c
+)
+
+set(simple_tunnel_demo_src
+    demo/simple_tunnel/simple_tunnel_device.c
 )
 
 set(port_src
@@ -99,7 +102,12 @@ target_compile_definitions(nabto_freertos_lwip_simulator PRIVATE -DMBEDTLS_CONFI
 
 add_dependencies(nabto_freertos_lwip_simulator GENERATE_VERSION)
 
-add_executable(simple_coap ${demo_src})
+add_executable(simple_coap ${simple_coap_demo_src})
 target_link_libraries(simple_coap nabto_freertos_lwip_simulator )
 target_include_directories(simple_coap PUBLIC demo)
 target_include_directories(simple_coap PUBLIC ${NABTO_DIR})
+
+add_executable(simple_tunnel ${simple_tunnel_demo_src})
+target_link_libraries(simple_tunnel nabto_freertos_lwip_simulator )
+target_include_directories(simple_tunnel PUBLIC demo)
+target_include_directories(simple_tunnel PUBLIC ${NABTO_DIR})
