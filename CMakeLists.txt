@@ -79,7 +79,7 @@ set(lwip_netif_src
 )
 
 set(nabto_lwip_src
-    src/nabto_lwip.c
+    src/nabto_lwip/nm_nabto_lwip.c
 )
 
 # If the different integration components are split into libraries, cyclic dependencies occurs. To circumvent cyclic dependencies all library code is compiled to one library.

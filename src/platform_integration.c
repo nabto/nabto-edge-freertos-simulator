@@ -8,7 +8,7 @@
 #include <modules/mdns/nm_mdns_server.h>
 
 #include "common.h"
-#include "nabto_lwip.h"
+#include "nabto_lwip/nm_nabto_lwip.h"
 #include "nabto_mdns_lwip/nm_mdns_lwip.h"
 #include "default_netif.h"
 
