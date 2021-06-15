@@ -217,6 +217,10 @@ static np_error_code nplwip_create_socket(struct np_udp *obj, struct np_udp_sock
     LOCK_TCPIP_CORE();
     socket->upcb = udp_new_ip_type(IPADDR_TYPE_ANY);
     UNLOCK_TCPIP_CORE();
+    if (socket->upcb == NULL) {
+        vPortFree(socket);
+        return NABTO_EC_OUT_OF_MEMORY;
+    }
 
     // @TODO: Check if socket->upcb is valid.
 
@@ -593,70 +597,6 @@ static size_t nplwip_get_local_ips(struct np_local_ip *obj, struct np_ip_address
     }
 }
 
-// ---------------------
-// mDNS
-// ---------------------
-
-typedef struct
-{
-    s32_t service;
-} nplwip_mdns_ctx;
-
-static void nplwip_serve_txt(struct mdns_service *service, void *txt_userdata)
-{
-    struct nn_string_map *txt_items = (struct nn_string_map*)txt_userdata;
-    struct nn_string_map_iterator it = nn_string_map_begin(txt_items);
-    while (!nn_string_map_is_end(&it))
-    {
-        const char *key = nn_string_map_key(&it);
-        const char *value = nn_string_map_value(&it);
-        size_t key_len = strlen(key);
-        size_t val_len = strlen(value);
-
-        // @TODO: It's probably not smart to be allocating in a loop like this.
-        char *txt = pvPortMalloc(key_len + val_len + 1);
-        txt[0] = 0;
-        strcat(txt, key);
-        strcat(txt, "=");
-        strcat(txt, value);
-
-        // @TODO: Assert that we're not putting more than 255 bytes of data into txt (lwip limit)
-        err_t error = mdns_resp_add_service_txtitem(service, txt, strlen(txt));
-        vPortFree(txt);
-
-        if (error)
-        {
-            NABTO_LOG_ERROR(MDNS_LOG, "error when calling mdns_resp_add_service_txtitem");
-            break;
-        }
-
-        nn_string_map_next(&it);
-    }
-}
-
-static void nplwip_publish_service(struct np_mdns *obj, uint16_t port, const char *instance_name,
-                                   struct nn_string_set *subtypes, struct nn_string_map *txt_items)
-{
-    // @TODO: Subtypes are possibly not supported by lwip?
-    UNUSED(subtypes);
-    nplwip_mdns_ctx *context = (nplwip_mdns_ctx*)obj->data;
-
-    // @TODO: Do we need to copy txt_items?
-    LOCK_TCPIP_CORE();
-    // TODO
-    // context->service = mdns_resp_add_service(netif_default, instance_name, "_nabto",
-    //                                          DNSSD_PROTO_UDP, port, 3600,
-    //                                          nplwip_serve_txt, txt_items);
-    UNLOCK_TCPIP_CORE();
-}
-
-static void nplwip_unpublish_service(struct np_mdns *obj)
-{
-    nplwip_mdns_ctx *context = (nplwip_mdns_ctx*)obj->data;
-    LOCK_TCPIP_CORE();
-    mdns_resp_del_service(netif_default, context->service);
-    UNLOCK_TCPIP_CORE();
-}
 
 // ---------------------
 // Public interface
@@ -692,11 +632,6 @@ static struct np_local_ip_functions local_ip_module = {
     .get_local_ips = nplwip_get_local_ips
 };
 
-static struct np_mdns_functions mdns_module = {
-    .publish_service = nplwip_publish_service,
-    .unpublish_service = nplwip_unpublish_service
-};
-
 struct np_dns nplwip_get_dns_impl()
 {
     struct np_dns obj;
@@ -726,13 +661,5 @@ struct np_local_ip nplwip_get_local_ip_impl()
     struct np_local_ip obj;
     obj.mptr = &local_ip_module;
     obj.data = NULL;
-    return obj;
-}
-
-struct np_mdns nplwip_get_mdns_impl()
-{
-    struct np_mdns obj;
-    obj.mptr = &mdns_module;
-    obj.data = pvPortMalloc(sizeof(nplwip_mdns_ctx));
     return obj;
 }

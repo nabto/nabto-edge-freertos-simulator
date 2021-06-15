@@ -1,5 +1,7 @@
 {
     "files.associations": {
         "atomic.h": "c"
-    }
+    },
+    "C_Cpp.clang_format_style": "{ BasedOnStyle: Google, IndentWidth: 4, AccessModifierOffset: -3, BraceWrapping: { AfterFunction: true }, BreakBeforeBraces: Custom, }",
+    "files.insertFinalNewline": true
 }

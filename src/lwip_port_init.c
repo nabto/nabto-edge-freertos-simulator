@@ -19,6 +19,7 @@
 #include "netif/ethernet.h"
 
 #include "console.h"
+#include "default_netif.h"
 
 #include <stdlib.h>
 #include <time.h>
@@ -38,6 +39,7 @@ static void LWIPStatusCallback(struct netif *state_netif)
 
 void lwip_port_init()
 {
+    tcpip_init(NULL, NULL);
     srand((unsigned int)time(0));
 
     ip4_addr_t ipaddr, netmask, gw;

@@ -5,13 +5,18 @@
 #include <api/nabto_device_platform.h>
 #include <api/nabto_device_integration.h>
 #include <modules/event_queue/thread_event_queue.h>
+#include <modules/mdns/nm_mdns_server.h>
 
 #include "common.h"
 #include "nabto_lwip.h"
+#include "mdns_lwip/nm_mdns_lwip.h"
+#include "default_netif.h"
+
 
 struct platform_data
 {
     struct thread_event_queue event_queue;
+    struct nm_mdns_lwip mdnsServer;
 };
 
 static uint32_t freertos_now_ms(struct np_timestamp *obj);
@@ -34,12 +39,20 @@ np_error_code nabto_device_platform_init(struct nabto_device_context *device,
     struct np_udp udp = nplwip_get_udp_impl();
     struct np_tcp tcp = nplwip_get_tcp_impl();
     struct np_local_ip localip = nplwip_get_local_ip_impl();
-    struct np_mdns mdns = nplwip_get_mdns_impl();
 
     thread_event_queue_init(&platform->event_queue, mutex, &ts);
     thread_event_queue_run(&platform->event_queue);
 
     struct np_event_queue event_queue_impl = thread_event_queue_get_impl(&platform->event_queue);
+
+    // Create a mdns server
+    // the mdns server requires special udp bind functions.
+    np_error_code errr = nm_mdns_lwip_init(&platform->mdnsServer, &event_queue_impl, &localip);
+
+    struct netif* defaultNetif = get_default_netif();
+    nm_mdns_lwip_add_netif(&platform->mdnsServer, defaultNetif);
+
+    struct np_mdns mdnsImpl = nm_mdns_lwip_get_impl(&platform->mdnsServer);
 
     nabto_device_integration_set_timestamp_impl(device, &ts);
     nabto_device_integration_set_event_queue_impl(device, &event_queue_impl);
@@ -47,7 +60,7 @@ np_error_code nabto_device_platform_init(struct nabto_device_context *device,
     nabto_device_integration_set_udp_impl(device, &udp);
     nabto_device_integration_set_tcp_impl(device, &tcp);
     nabto_device_integration_set_local_ip_impl(device, &localip);
-    nabto_device_integration_set_mdns_impl(device, &mdns);
+    nabto_device_integration_set_mdns_impl(device, &mdnsImpl);
 
     nabto_device_integration_set_platform_data(device, platform);
 
@@ -73,4 +86,3 @@ uint32_t freertos_now_ms(struct np_timestamp *obj)
     TickType_t tick_count = xTaskGetTickCount();
     return tick_count / portTICK_PERIOD_MS;
 }
-
