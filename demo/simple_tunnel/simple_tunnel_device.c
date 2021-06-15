@@ -1,79 +1,113 @@
+#include <FreeRTOS.h>
+#include <task.h>
+
+#include "console.h"
+#include "lwip_port_init.h"
+
 #include <nabto/nabto_device.h>
 
 #include <apps/common/string_file.h>
 
 #include <stdio.h>
-#include <signal.h>
 #include <stdlib.h>
 
 const char* appName = "simple_tunnel";
 
 // TCP tunnel configuration.
-const char* serviceHost = "127.0.0.1";
+const char* serviceHost = "192.168.100.1";
 uint16_t    servicePort = 22;
 const char* serviceId   = "ssh";
 const char* serviceType = "ssh";
 
 #define NEWLINE "\n"
 
-void signal_handler(int s);
+static int tunnelDeviceTask();
+static void nabtoTask(void *arg);
+
 NabtoDeviceError load_or_create_private_key();
 
 NabtoDevice* device = NULL;
 
+static const char* productId;
+static const char* deviceId;
+
+
 int main(int argc, char** argv) {
+    if (argc != 3) {
+        console_print("The example takes 2 arguments %s <product-id> <device-id>\n", argv[0]);
+        return 1;
+    }
+
+    productId = argv[1];
+    deviceId = argv[2];
+
+    // init FreeRTOS and LwIP
+    console_init();
+    lwip_port_init();
+
+    // Create the nabto coap task.
+    xTaskCreate(nabtoTask, "NabtoMain",
+                configMINIMAL_STACK_SIZE, NULL,
+                configMAX_PRIORITIES-1, NULL);
+
+    // Run the freertos scheduler.
+    vTaskStartScheduler();
+    return 0;
+}
+
+static void nabtoTask(void *arg) {
+    tunnelDeviceTask();
+    vTaskDelete(NULL);
+}
+
+
+int tunnelDeviceTask()
+{
+
     NabtoDeviceError ec;
     NabtoDeviceFuture* future = NULL;
     NabtoDeviceListener* authorizationListener = NULL;
     NabtoDeviceAuthorizationRequest* authorizationRequest = NULL;
     char* deviceFingerprint = NULL;
 
-    if (argc != 3) {
-        printf("The example takes exactly two arguments. %s <product-id> <device-id>" NEWLINE, argv[0]);
-        return -1;
-    }
-
-    char* productId = argv[1];
-    char* deviceId = argv[2];
-
-    printf("Nabto Embedded SDK Version %s\n", nabto_device_version());
+    console_print("Nabto Embedded SDK Version %s\n", nabto_device_version());
 
     device = nabto_device_new();
     future = nabto_device_future_new(device);
     authorizationListener = nabto_device_listener_new(device);
 
     if (device == NULL || future == NULL || authorizationListener == NULL) {
-        printf("Could not allocate resources" NEWLINE);
+        console_print("Could not allocate resources" NEWLINE);
         goto cleanup;
     }
 
     ec = load_or_create_private_key();
     if (ec != NABTO_DEVICE_EC_OK) {
-        printf("Could not load or create the private key. %s" NEWLINE, nabto_device_error_get_message(ec));
+        console_print("Could not load or create the private key. %s" NEWLINE, nabto_device_error_get_message(ec));
         goto cleanup;
     }
 
     ec = nabto_device_set_product_id(device, productId);
     if (ec != NABTO_DEVICE_EC_OK) {
-        printf("Failed to set product id. %s" NEWLINE, nabto_device_error_get_message(ec));
+        console_print("Failed to set product id. %s" NEWLINE, nabto_device_error_get_message(ec));
         goto cleanup;
     }
 
     ec = nabto_device_set_device_id(device, deviceId);
     if (ec != NABTO_DEVICE_EC_OK) {
-        printf("Failed to set device id. %s" NEWLINE, nabto_device_error_get_message(ec));
+        console_print("Failed to set device id. %s" NEWLINE, nabto_device_error_get_message(ec));
         goto cleanup;
     }
 
     ec = nabto_device_set_app_name(device, appName);
     if (ec != NABTO_DEVICE_EC_OK) {
-        printf("Failed to set app name. %s" NEWLINE, nabto_device_error_get_message(ec));
+        console_print("Failed to set app name. %s" NEWLINE, nabto_device_error_get_message(ec));
         goto cleanup;
     }
 
     ec = nabto_device_set_log_level(device, "info");
     if (ec != NABTO_DEVICE_EC_OK) {
-        printf("Could not set log level. %s" NEWLINE, nabto_device_error_get_message(ec));
+        console_print("Could not set log level. %s" NEWLINE, nabto_device_error_get_message(ec));
         goto cleanup;
     }
 
@@ -86,30 +120,27 @@ int main(int argc, char** argv) {
      */
     ec = nabto_device_add_tcp_tunnel_service(device, serviceId, serviceType, serviceHost, servicePort);
     if (ec != NABTO_DEVICE_EC_OK) {
-        printf("Failed to add the tunnel service. %s" NEWLINE, nabto_device_error_get_message(ec));
+        console_print("Failed to add the tunnel service. %s" NEWLINE, nabto_device_error_get_message(ec));
         goto cleanup;
     }
 
     ec = nabto_device_get_device_fingerprint(device, &deviceFingerprint);
     if (ec != NABTO_DEVICE_EC_OK) {
-        printf("Could not get the fingerprint. %s" NEWLINE, nabto_device_error_get_message(ec));
+        console_print("Could not get the fingerprint. %s" NEWLINE, nabto_device_error_get_message(ec));
         goto cleanup;
     }
 
-    printf("Configuration:" NEWLINE);
-    printf("ProductId:   %s" NEWLINE, productId);
-    printf("DeviceId:    %s" NEWLINE, deviceId);
-    printf("Fingerprint: %s" NEWLINE, deviceFingerprint);
+    console_print("Configuration:" NEWLINE);
+    console_print("ProductId:   %s" NEWLINE, productId);
+    console_print("DeviceId:    %s" NEWLINE, deviceId);
+    console_print("Fingerprint: %s" NEWLINE, deviceFingerprint);
 
     nabto_device_start(device, future);
     ec = nabto_device_future_wait(future);
     if (ec != NABTO_DEVICE_EC_OK) {
-        printf("could not start the device. %s" NEWLINE, nabto_device_error_get_message(ec));
+        console_print("could not start the device. %s" NEWLINE, nabto_device_error_get_message(ec));
         goto cleanup;
     }
-
-    // wait for ctrl+c
-    signal(SIGINT, &signal_handler);
 
     // When a tunnel is created an authorization request is made, allow all
     // these authorization requests.
@@ -141,16 +172,6 @@ int main(int argc, char** argv) {
     nabto_device_free(device);
 }
 
-void signal_handler(int s)
-{
-    printf("Got signal %d" NEWLINE, s);
-    NabtoDeviceFuture* future = nabto_device_future_new(device);
-    nabto_device_close(device, future);
-    nabto_device_future_wait(future);
-    nabto_device_future_free(future);
-    // also stops the authorization listener.
-    nabto_device_stop(device);
-}
 
 NabtoDeviceError load_or_create_private_key()
 {
