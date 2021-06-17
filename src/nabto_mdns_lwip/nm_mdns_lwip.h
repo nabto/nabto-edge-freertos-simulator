@@ -28,6 +28,7 @@ struct nm_mdns_lwip {
 };
 
 np_error_code nm_mdns_lwip_init(struct nm_mdns_lwip* ctx, struct np_event_queue* eq, struct np_local_ip* localIp);
+void nm_mdns_lwip_deinit(struct nm_mdns_lwip* ctx);
 
 void nm_mdns_lwip_add_netif(struct nm_mdns_lwip* ctx, struct netif* netif);
 void nm_mdns_lwip_remove_netif(struct nm_mdns_lwip* ctx, struct netif* netif);

@@ -15,9 +15,9 @@ const char* appName = "simple_tunnel";
 
 // TCP tunnel configuration.
 const char* serviceHost = "192.168.100.1";
-uint16_t    servicePort = 22;
-const char* serviceId   = "ssh";
-const char* serviceType = "ssh";
+uint16_t    servicePort = 80;
+const char* serviceId   = "http";
+const char* serviceType = "http";
 
 #define NEWLINE "\n"
 
@@ -105,10 +105,14 @@ int tunnelDeviceTask()
         goto cleanup;
     }
 
-    ec = nabto_device_set_log_level(device, "info");
-    if (ec != NABTO_DEVICE_EC_OK) {
-        console_print("Could not set log level. %s" NEWLINE, nabto_device_error_get_message(ec));
-        goto cleanup;
+    const char* logLevel = getenv("NABTO_LOG_LEVEL");
+    if (logLevel != NULL) {
+        ec = nabto_device_set_log_level(device, logLevel);
+        if (ec != NABTO_DEVICE_EC_OK) {
+            console_print("Could not set log level. %s" NEWLINE,
+                          nabto_device_error_get_message(ec));
+            goto cleanup;
+        }
     }
 
     nabto_device_enable_mdns(device);

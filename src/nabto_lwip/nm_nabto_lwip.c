@@ -1,4 +1,5 @@
 #include "nm_nabto_lwip.h"
+#include "nm_nabto_lwip_util.h"
 
 #include <string.h>
 
@@ -49,47 +50,6 @@ struct np_udp_socket
     struct np_completion_event *ce;
     bool aborted;
 };
-
-struct np_tcp_socket
-{
-    struct tcp_pcb *pcb;
-    struct np_completion_event *connect_ce;
-    struct pbuf *packet;
-};
-
-// ---------------------
-// Utility functions
-// ---------------------
-
-static void nplwip_convertip_np_to_lwip(const struct np_ip_address *from, ip_addr_t *to)
-{
-    memset(to, 0, sizeof(*to));
-    if (from->type == NABTO_IPV4)
-    {
-        to->type = IPADDR_TYPE_V4;
-        memcpy(&to->u_addr.ip4.addr, from->ip.v4, sizeof(to->u_addr.ip4.addr));
-    }
-    else
-    {
-        to->type = IPADDR_TYPE_V6;
-        memcpy(to->u_addr.ip6.addr, from->ip.v6, sizeof(to->u_addr.ip6.addr));
-    }
-}
-
-static void nplwip_convertip_lwip_to_np(const ip_addr_t *from, struct np_ip_address *to)
-{
-    memset(to, 0, sizeof(*to));
-    if (from->type == IPADDR_TYPE_V4)
-    {
-        to->type = NABTO_IPV4;
-        memcpy(to->ip.v4, &from->u_addr.ip4.addr, sizeof(to->ip.v4));
-    }
-    else
-    {
-        to->type = NABTO_IPV6;
-        memcpy(to->ip.v6, from->u_addr.ip6.addr, sizeof(to->ip.v6));
-    }
-}
 
 // ---------------------
 // DNS
@@ -391,192 +351,6 @@ static uint16_t nplwip_get_local_port(struct np_udp_socket *socket)
 }
 
 // ---------------------
-// TCP
-// ---------------------
-
-static void nplwip_tcp_destroy(struct np_tcp_socket *socket);
-
-static err_t nplwip_tcp_connected_callback(void *arg, struct tcp_pcb *tpcb, err_t err)
-{
-    UNUSED(tpcb);
-    UNUSED(err);
-    struct np_tcp_socket *socket = (struct np_tcp_socket*)arg;
-    np_completion_event_resolve(socket->connect_ce, NABTO_EC_OK);
-    return ERR_OK;
-}
-
-static err_t nplwip_tcp_recv_callback(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
-{
-    UNUSED(tpcb);
-    struct np_tcp_socket *socket = (struct np_tcp_socket*)arg;
-
-    if (p == NULL)
-    {
-        // If this function is called with NULL then the host has closed the connection.
-        // nplwip_tcp_destroy(socket);
-        return ERR_OK;
-    }
-
-    if (err != ERR_OK)
-    {
-        // @TODO: For some reason, we got a packet that we did not expect.
-        return err;
-    }
-    else
-    {
-        if (socket->packet == NULL)
-        {
-            socket->packet = p;
-        }
-        else
-        {
-            pbuf_cat(socket->packet, p);
-        }
-    }
-
-    return ERR_OK;
-}
-
-static np_error_code nplwip_tcp_create(struct np_tcp *obj, struct np_tcp_socket **out_socket)
-{
-    UNUSED(obj);
-    struct np_tcp_socket *socket = malloc(sizeof(struct np_tcp_socket));
-    if (socket == NULL)
-    {
-        return NABTO_EC_OUT_OF_MEMORY;
-    }
-
-    LOCK_TCPIP_CORE();
-    socket->pcb = tcp_new_ip_type(IPADDR_TYPE_ANY);
-    tcp_arg(socket->pcb, socket);
-    tcp_recv(socket->pcb, nplwip_tcp_recv_callback);
-    UNLOCK_TCPIP_CORE();
-
-    socket->connect_ce = NULL;
-    socket->packet = NULL;
-
-    // @TODO: Check if socket->pcb is valid.
-    // @TODO: Set an error callback with tcp_err()
-
-    *out_socket = socket;
-    return NABTO_EC_OK;
-}
-
-static void nplwip_tcp_abort(struct np_tcp_socket *socket)
-{
-    LOCK_TCPIP_CORE();
-    tcp_abort(socket->pcb);
-    UNLOCK_TCPIP_CORE();
-}
-
-static void nplwip_tcp_destroy(struct np_tcp_socket *socket)
-{
-    if (socket == NULL)
-    {
-        NABTO_LOG_ERROR(TCP_LOG, "TCP socket destroyed twice.");
-        return;
-    }
-
-    LOCK_TCPIP_CORE();
-    tcp_arg(socket->pcb, NULL);
-    tcp_sent(socket->pcb, NULL);
-    tcp_recv(socket->pcb, NULL);
-    err_t error = tcp_close(socket->pcb);
-    UNLOCK_TCPIP_CORE();
-    if (error == ERR_MEM)
-    {
-        NABTO_LOG_ERROR(TCP_LOG, "lwIP failed to close TCP socket due to lack of memory.")
-        // @TODO: We need to wait and try to close again in the acknowledgement callback.
-    }
-
-    free(socket);
-}
-
-static void nplwip_tcp_async_connect(struct np_tcp_socket *socket, struct np_ip_address *addr, uint16_t port,
-                                     struct np_completion_event *completion_event)
-{
-    ip_addr_t ip;
-    nplwip_convertip_np_to_lwip(addr, &ip);
-
-    socket->connect_ce = completion_event;
-
-    LOCK_TCPIP_CORE();
-    err_t error = tcp_connect(socket->pcb, &ip, port, nplwip_tcp_connected_callback);
-    UNLOCK_TCPIP_CORE();
-    if (error == ERR_MEM)
-    {
-        NABTO_LOG_ERROR(TCP_LOG, "TCP socket could not connect due to lack of memory.");
-        np_completion_event_resolve(completion_event, NABTO_EC_UNKNOWN);
-    }
-}
-
-// @TODO: Currently calling tcp_output to flush out data immediately for simplicity.
-// This may not be optimal (see lwip docs).
-static void nplwip_tcp_async_write(struct np_tcp_socket *socket, const void *data, size_t data_len,
-                                   struct np_completion_event *completion_event)
-{
-    LOCK_TCPIP_CORE();
-    err_t error;
-
-    error = tcp_write(socket->pcb, data, data_len, 0);
-    if (error != ERR_OK)
-    {
-        NABTO_LOG_ERROR(TCP_LOG, "tcp_write failed, lwIP error: %i", error);
-        np_completion_event_resolve(completion_event, NABTO_EC_UNKNOWN);
-    }
-
-    error = tcp_output(socket->pcb);
-    if (error != ERR_OK)
-    {
-        NABTO_LOG_ERROR(TCP_LOG, "tcp_output failed, lwIP error: %i", error);
-        np_completion_event_resolve(completion_event, NABTO_EC_UNKNOWN);
-    }
-
-    UNLOCK_TCPIP_CORE();
-
-    if (error == ERR_OK)
-    {
-        np_completion_event_resolve(completion_event, NABTO_EC_OK);
-    }
-}
-
-static void nplwip_tcp_async_read(struct np_tcp_socket *socket, void *buffer, size_t buffer_len, size_t *read_len,
-                                  struct np_completion_event *completion_event)
-{
-    struct pbuf *ptr;
-    size_t read = 0;
-
-    LOCK_TCPIP_CORE();
-    while (socket->packet != NULL && (read + socket->packet->len) <= buffer_len)
-    {
-        ptr = socket->packet;
-        u16_t plen = ptr->len;
-        read += plen;
-
-        memcpy(buffer, ptr->payload, plen);
-        socket->packet = ptr->next;
-        pbuf_free(ptr);
-
-        tcp_recved(socket->pcb, plen);
-    }
-    UNLOCK_TCPIP_CORE();
-
-    *read_len = read;
-    np_completion_event_resolve(completion_event, NABTO_EC_OK);
-}
-
-static void nplwip_tcp_shutdown(struct np_tcp_socket *socket)
-{
-    LOCK_TCPIP_CORE();
-    err_t error = tcp_shutdown(socket->pcb, 0, 1);
-    UNLOCK_TCPIP_CORE();
-    if (error != ERR_OK)
-    {
-        NABTO_LOG_ERROR(TCP_LOG, "TCP socket shutdown failed for some reason.");
-    }
-}
-
-// ---------------------
 // Local IP
 // ---------------------
 
@@ -619,16 +393,6 @@ static struct np_udp_functions udp_module = {
     .get_local_port = nplwip_get_local_port
 };
 
-static struct np_tcp_functions tcp_module = {
-    .create = nplwip_tcp_create,
-    .destroy = nplwip_tcp_destroy,
-    .abort = nplwip_tcp_abort,
-    .async_connect = nplwip_tcp_async_connect,
-    .async_write = nplwip_tcp_async_write,
-    .async_read = nplwip_tcp_async_read,
-    .shutdown = nplwip_tcp_shutdown
-};
-
 static struct np_local_ip_functions local_ip_module = {
     .get_local_ips = nplwip_get_local_ips
 };
@@ -645,14 +409,6 @@ struct np_udp nplwip_get_udp_impl()
 {
     struct np_udp obj;
     obj.mptr = &udp_module;
-    obj.data = NULL;
-    return obj;
-}
-
-struct np_tcp nplwip_get_tcp_impl()
-{
-    struct np_tcp obj;
-    obj.mptr = &tcp_module;
     obj.data = NULL;
     return obj;
 }

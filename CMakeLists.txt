@@ -83,6 +83,16 @@ set(lwip_netif_src
 
 set(nabto_lwip_src
     src/nabto_lwip/nm_nabto_lwip.c
+    src/nabto_lwip/nm_nabto_lwip_tcp.c
+    src/nabto_lwip/nm_nabto_lwip_util.c
+)
+
+set(integration_test_src
+    integration_test/integration_test.c
+    lwip-contrib/apps/udpecho_raw/udpecho_raw.c
+    lwip-contrib/apps/tcpecho_raw/tcpecho_raw.c
+    #integration_test/lwip_udp_echo_server.c
+    #integration_test/lwip_tcp_echo_server.c
 )
 
 # If the different integration components are split into libraries, cyclic dependencies occurs. To circumvent cyclic dependencies all library code is compiled to one library.
@@ -101,6 +111,12 @@ target_link_libraries(nabto_freertos_lwip_simulator pthread)
 target_compile_definitions(nabto_freertos_lwip_simulator PRIVATE -DMBEDTLS_CONFIG_FILE=<nabto_mbedtls_config.h> ${LWIP_DEFINITIONS} ${LWIP_MBEDTLS_DEFINITIONS})
 
 add_dependencies(nabto_freertos_lwip_simulator GENERATE_VERSION)
+
+add_executable(integration_test ${integration_test_src})
+target_link_libraries(integration_test nabto_freertos_lwip_simulator )
+target_include_directories(integration_test PRIVATE ${LWIP_INCLUDE_DIRS})
+target_include_directories(integration_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lwip-contrib/apps/udpecho_raw)
+target_include_directories(integration_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lwip-contrib/apps/tcpecho_raw)
 
 add_executable(simple_coap ${simple_coap_demo_src})
 target_link_libraries(simple_coap nabto_freertos_lwip_simulator )

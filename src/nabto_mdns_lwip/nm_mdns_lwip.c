@@ -56,17 +56,34 @@ np_error_code nm_mdns_lwip_init(struct nm_mdns_lwip* ctx,
     ctx->localIpsSize = 0;
     ctx->localIp = *localIp;
     nabto_mdns_server_init(&ctx->mdnsServer);
+    LOCK_TCPIP_CORE();
     ctx->socket = udp_new_ip_type(IPADDR_TYPE_ANY);
+    UNLOCK_TCPIP_CORE();
     if (ctx->socket == NULL) {
         return NABTO_EC_OUT_OF_MEMORY;
     }
+    LOCK_TCPIP_CORE();
     err_t err = udp_bind(ctx->socket, IP4_ADDR_ANY, 5353);
+    UNLOCK_TCPIP_CORE();
     if (err != ERR_OK) {
         return NABTO_EC_UDP_SOCKET_CREATION_ERROR;
     }
 
     start_recv(ctx);
     return NABTO_EC_OK;
+}
+
+void nm_mdns_lwip_deinit(struct nm_mdns_lwip* ctx)
+{
+    LOCK_TCPIP_CORE();
+    udp_remove(ctx->socket);
+    UNLOCK_TCPIP_CORE();
+
+    while(!nn_llist_empty(&ctx->netifList)) {
+        struct nn_llist_iterator it = nn_llist_begin(&ctx->netifList);
+        struct netif* netif = nn_llist_get_item(&it);
+        nm_mdns_lwip_remove_netif(ctx, netif);
+    }
 }
 
 void nm_mdns_lwip_add_netif(struct nm_mdns_lwip* ctx, struct netif* netif)
@@ -101,10 +118,14 @@ void nm_mdns_lwip_remove_netif(struct nm_mdns_lwip* ctx, struct netif* netif)
 void leave_groups(struct netif* netif)
 {
 #if LWIP_IPV4
+    LOCK_TCPIP_CORE();
     igmp_leavegroup_netif(netif, ip_2_ip4(&v4group));
+    UNLOCK_TCPIP_CORE();
 #endif
 #if LWIP_IPV6
+    LOCK_TCPIP_CORE();
     mld6_leavegroup_netif(netif, ip_2_ip6(&v6group));
+    UNLOCK_TCPIP_CORE();
 #endif
 }
 
@@ -113,13 +134,17 @@ np_error_code join_groups(struct netif* netif)
     int res;
 #if LWIP_IPV4
 
+    LOCK_TCPIP_CORE();
     res = igmp_joingroup_netif(netif, ip_2_ip4(&v4group));
+    UNLOCK_TCPIP_CORE();
     if (res != ERR_OK) {
         return NABTO_EC_UNKNOWN;
     }
 #endif
 #if LWIP_IPV6
+    LOCK_TCPIP_CORE();
     res = mld6_joingroup_netif(netif, ip_2_ip6(&v6group));
+    UNLOCK_TCPIP_CORE();
     if (res != ERR_OK) {
         return NABTO_EC_UNKNOWN;
     }
@@ -128,7 +153,7 @@ np_error_code join_groups(struct netif* netif)
     return NABTO_EC_OK;
 }
 
-void packet_received(void* userData, struct udp_pcb* pcb, struct pbuf* p,
+static void packet_received(void* userData, struct udp_pcb* pcb, struct pbuf* p,
                      const ip_addr_t* addr, u16_t port)
 {
     struct nm_mdns_lwip* ctx = userData;
@@ -168,7 +193,9 @@ void send_packet(struct nm_mdns_lwip* ctx, uint16_t id, bool unicastResponse, bo
             buf = pbuf_alloc(PBUF_TRANSPORT, written, PBUF_RAM);
             if (buf != NULL) {
                 if (pbuf_take(buf, buffer, written) == ERR_OK) {
+                    LOCK_TCPIP_CORE();
                     udp_sendto_if(ctx->socket, buf, dstIp, dstPort, netif);
+                    UNLOCK_TCPIP_CORE();
                 }
             }
         }
@@ -180,7 +207,9 @@ void send_packet(struct nm_mdns_lwip* ctx, uint16_t id, bool unicastResponse, bo
 
 void start_recv(struct nm_mdns_lwip* ctx)
 {
+    LOCK_TCPIP_CORE();
     udp_recv(ctx->socket, packet_received, ctx);
+    UNLOCK_TCPIP_CORE();
 }
 
 void update_local_ips(struct nm_mdns_lwip* mdns)

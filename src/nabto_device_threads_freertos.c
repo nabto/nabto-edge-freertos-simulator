@@ -91,12 +91,12 @@ void nabto_device_threads_free_cond(struct nabto_device_condition *cond)
 
 void nabto_device_threads_join(struct nabto_device_thread *thread)
 {
-    if (xSemaphoreTake((SemaphoreHandle_t)&thread->join_mutex, 0) == pdPASS)
+    if (xSemaphoreTake(thread->join_mutex, 0) == pdPASS)
     {
         // @TODO: Check whether a thread is trying to join on itself, which is illegal.
 
         // Wait for joining thread to finish
-        xSemaphoreTake((SemaphoreHandle_t)&thread->join_barrier, portMAX_DELAY);
+        xSemaphoreTake(thread->join_barrier, portMAX_DELAY);
 
         // Suspend all tasks while cleaning up this thread.
         vTaskSuspendAll();
@@ -137,12 +137,12 @@ np_error_code nabto_device_threads_run(struct nabto_device_thread* thread, void 
 
 void nabto_device_threads_mutex_lock(struct nabto_device_mutex *mutex)
 {
-    xSemaphoreTake(mutex->mutex, portMAX_DELAY);
+    xSemaphoreTakeFromISR(mutex->mutex, NULL);
 }
 
 void nabto_device_threads_mutex_unlock(struct nabto_device_mutex *mutex)
 {
-    xSemaphoreGive(mutex->mutex);
+    xSemaphoreGiveFromISR(mutex->mutex, NULL);
 }
 
 void nabto_device_threads_cond_signal(struct nabto_device_condition *cond)
@@ -155,7 +155,7 @@ void nabto_device_threads_cond_signal(struct nabto_device_condition *cond)
                                       (uint32_t)local_waiting_threads-1,
                                       (uint32_t)local_waiting_threads))
         {
-            xSemaphoreGive(cond->semaphore);
+            xSemaphoreGiveFromISR(cond->semaphore, NULL);
             break;
         }
 

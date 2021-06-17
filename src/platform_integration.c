@@ -70,6 +70,7 @@ np_error_code nabto_device_platform_init(struct nabto_device_context *device,
 void nabto_device_platform_deinit(struct nabto_device_context *device)
 {
     struct platform_data *platform = nabto_device_integration_get_platform_data(device);
+    nm_mdns_lwip_deinit(&platform->mdnsServer);
     thread_event_queue_deinit(&platform->event_queue);
 }
 
