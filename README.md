@@ -30,7 +30,6 @@ Implemented:
   * Simple CoAP demo
 
 TODO:
-  * MDNS integration, the LwIP mdns server does not support subtypes so we need to use the Nabto MDNS server.
   * libpcap integration for LwIP such that LwIP can be used directly with ethernet interfaces.
 
 

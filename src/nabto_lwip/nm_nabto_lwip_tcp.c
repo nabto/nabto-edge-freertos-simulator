@@ -87,7 +87,7 @@ static err_t nplwip_tcp_recv_callback(void *arg, struct tcp_pcb *tpcb, struct pb
 static np_error_code nplwip_tcp_create(struct np_tcp *obj, struct np_tcp_socket **out_socket)
 {
     UNUSED(obj);
-    struct np_tcp_socket *socket = malloc(sizeof(struct np_tcp_socket));
+    struct np_tcp_socket *socket = calloc(1, sizeof(struct np_tcp_socket));
     if (socket == NULL)
     {
         return NABTO_EC_OUT_OF_MEMORY;

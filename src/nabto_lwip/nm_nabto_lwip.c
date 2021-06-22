@@ -79,7 +79,7 @@ static void nplwip_async_resolve(struct np_dns *obj, const char *host,
                                  int addr_type)
 {
     UNUSED(obj);
-    dns_resolve_event *event = malloc(sizeof *event);
+    dns_resolve_event *event = calloc(1, sizeof(dns_resolve_event));
     event->ips_size = ips_size;
     event->ips_resolved = ips_resolved;
     event->ips = ips;
@@ -168,7 +168,7 @@ static np_error_code nplwip_create_socket(struct np_udp *obj, struct np_udp_sock
 {
     UNUSED(obj);
 
-    struct np_udp_socket *socket = malloc(sizeof(struct np_udp_socket));
+    struct np_udp_socket *socket = calloc(1, sizeof(struct np_udp_socket));
     if (socket == NULL)
     {
         return NABTO_EC_OUT_OF_MEMORY;
