@@ -187,5 +187,7 @@ int integrationTestTask()
     dns_test(testServerHost, testServerPort);
     udp_test(testServerHost, testServerPort);
     tcp_test(testServerHost, testServerPort);
+    vTaskDelay(500/portTICK_PERIOD_MS);
+    exit(0);
 
 }

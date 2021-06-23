@@ -46,6 +46,28 @@ cmake ..
 make -j
 ```
 
+## Integration test
+
+The integration tests tests the nabto implementation against lwip and FreeRTOS.
+
+```
+./build/integration_test
+```
+
+Example output
+```
+vscode@2b86f239ccb5:/workspaces/nabto-edge-freertos-simulator/build$ ./integration_test
+Starting lwIP, local interface IP is 192.168.100.200
+ip6 linklocal address: FE80::12:34FF:FE56:78AB
+status_callback==UP, local interface IP is 192.168.100.200
+Create device test passed
+Future resolve test has passed
+Event queue test has passed
+DNS test has passed
+UDP test has passed
+TCP test has passed
+```
+
 ## Running
 
 ### Linux
