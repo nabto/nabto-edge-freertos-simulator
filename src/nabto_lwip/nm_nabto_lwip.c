@@ -143,7 +143,7 @@ static void nplwip_udp_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p,
                                 const ip_addr_t *addr, u16_t port)
 {
     UNUSED(upcb);
-    NABTO_LOG_INFO(UDP_LOG, "Received UDP packet from %s:%i", ip_ntoa(addr), port);
+    NABTO_LOG_INFO(UDP_LOG, "Received UDP packet from %s:%i size %d", ip_ntoa(addr), port, p->tot_len);
     struct np_udp_socket *socket = (struct np_udp_socket*)arg;
     if (p != NULL && socket->packet == NULL)
     {

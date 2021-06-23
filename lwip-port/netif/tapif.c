@@ -216,9 +216,16 @@ low_level_output(struct netif *netif, struct pbuf *p)
   struct tapif *tapif = (struct tapif *)netif->state;
 
   struct packet* packet = malloc(sizeof(struct packet));
-  packet->dataLength = p->len;
-  memcpy(packet->data, p->payload, p->len);
-//  pbuf_free(p);
+  if (p->tot_len > MAX_PACKET_LENGTH) {
+    return ERR_MEM;
+  }
+  uint8_t* ptr = packet->data;
+  packet->dataLength = p->tot_len;
+  while(p != NULL) {
+    memcpy(ptr, p->payload, p->len);
+    ptr += p->len;
+    p = p->next;
+  }
 
   if (list_push(tapif->outList, packet) == 0) {
     free(packet);

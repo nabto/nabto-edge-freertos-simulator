@@ -1,82 +1,94 @@
-#include "nm_nabto_lwip.h"
-#include "nm_nabto_lwip_util.h"
-
-#include <string.h>
-
-#include <lwip/tcp.h>
 #include <lwip/netif.h>
-
-#include <platform/interfaces/np_tcp.h>
-
-#include <platform/np_types.h>
-#include <platform/np_error_code.h>
-#include <platform/np_completion_event.h>
-#include <platform/np_logging.h>
-
-#include <nn/string_set.h>
+#include <lwip/tcp.h>
 #include <nn/string_map.h>
+#include <nn/string_set.h>
+#include <platform/interfaces/np_tcp.h>
+#include <platform/np_completion_event.h>
+#include <platform/np_error_code.h>
+#include <platform/np_logging.h>
+#include <platform/np_types.h>
+#include <string.h>
 
 #include "common.h"
 #include "default_netif.h"
+#include "nm_nabto_lwip.h"
+#include "nm_nabto_lwip_util.h"
 
-#define TCP_LOG  NABTO_LOG_MODULE_TCP
+#define TCP_LOG NABTO_LOG_MODULE_TCP
 
-struct np_tcp_socket
-{
+struct np_tcp_socket {
     struct tcp_pcb *pcb;
     struct np_completion_event *connect_ce;
     struct np_completion_event *readCompletionEvent;
-    void* readBuffer;
+    void *readBuffer;
     size_t readBufferLength;
-    size_t* readLength;
-    struct pbuf *inBuffer; // pbuf or chain of pbufs with incoming tcp data.
-    uint16_t inBufferOffset; // offset into the head pbuffer where to read from.
+    size_t *readLength;
+    struct pbuf *inBuffer;  // pbuf or chain of pbufs with incoming tcp data.
+    uint16_t
+        inBufferOffset;  // offset into the head pbuffer where to read from.
+    bool remoteClosed;
+    bool aborted;
 };
-
 
 // ---------------------
 // TCP
 // ---------------------
 
 static void nplwip_tcp_destroy(struct np_tcp_socket *socket);
-static void try_read(struct np_tcp_socket* socket);
+static void try_read(struct np_tcp_socket *socket);
 
-static err_t nplwip_tcp_connected_callback(void *arg, struct tcp_pcb *tpcb, err_t err)
+static err_t nplwip_tcp_connected_callback(void *arg, struct tcp_pcb *tpcb,
+                                           err_t err)
 {
+    NABTO_LOG_TRACE(TCP_LOG, "TCP Connected");
     UNUSED(tpcb);
     UNUSED(err);
-    struct np_tcp_socket *socket = (struct np_tcp_socket*)arg;
+    struct np_tcp_socket *socket = (struct np_tcp_socket *)arg;
     np_completion_event_resolve(socket->connect_ce, NABTO_EC_OK);
     return ERR_OK;
 }
 
-static err_t nplwip_tcp_recv_callback(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
+static void nplwip_tcp_err_callback(void *arg, err_t err)
+{
+    struct np_tcp_socket *socket = arg;
+    if (err == ERR_RST) {
+        NABTO_LOG_TRACE(TCP_LOG, "TCP RST");
+        socket->aborted = true;
+    } else if (err == ERR_ABRT) {
+        NABTO_LOG_TRACE(TCP_LOG, "TCP_ABRT")
+        socket->aborted = true;
+    } else {
+        NABTO_LOG_TRACE(TCP_LOG, "err %d", err);
+    }
+    try_read(socket);
+}
+
+static err_t nplwip_tcp_recv_callback(void *arg, struct tcp_pcb *tpcb,
+                                      struct pbuf *p, err_t err)
 {
     UNUSED(tpcb);
-    struct np_tcp_socket *socket = (struct np_tcp_socket*)arg;
+    struct np_tcp_socket *socket = (struct np_tcp_socket *)arg;
 
-    if (p == NULL)
-    {
-        // If this function is called with NULL then the host has closed the connection.
-        // nplwip_tcp_destroy(socket);
+    if (p == NULL) {
+        // If this function is called with NULL then the host has closed the
+        // connection. nplwip_tcp_destroy(socket);
+        socket->remoteClosed = true;
         return ERR_OK;
     }
 
-    if (err != ERR_OK)
-    {
-        // @TODO: For some reason, we got a packet that we did not expect.
-        return err;
+    if (err != ERR_OK) {
+        NABTO_LOG_TRACE(TCP_LOG,
+                  "tcp recv callback with non OK err %d aborting the socket.",
+                  err);
+        tcp_abort(tpcb);
+        socket->aborted = true;
+        return ERR_ABRT;
     }
-    else
-    {
-        if (socket->inBuffer == NULL)
-        {
-            socket->inBuffer = p;
-        }
-        else
-        {
-            pbuf_cat(socket->inBuffer, p);
-        }
+
+    if (socket->inBuffer == NULL) {
+        socket->inBuffer = p;
+    } else {
+        pbuf_cat(socket->inBuffer, p);
     }
 
     try_read(socket);
@@ -84,12 +96,12 @@ static err_t nplwip_tcp_recv_callback(void *arg, struct tcp_pcb *tpcb, struct pb
     return ERR_OK;
 }
 
-static np_error_code nplwip_tcp_create(struct np_tcp *obj, struct np_tcp_socket **out_socket)
+static np_error_code nplwip_tcp_create(struct np_tcp *obj,
+                                       struct np_tcp_socket **out_socket)
 {
     UNUSED(obj);
     struct np_tcp_socket *socket = calloc(1, sizeof(struct np_tcp_socket));
-    if (socket == NULL)
-    {
+    if (socket == NULL) {
         return NABTO_EC_OUT_OF_MEMORY;
     }
 
@@ -105,6 +117,7 @@ static np_error_code nplwip_tcp_create(struct np_tcp *obj, struct np_tcp_socket 
     LOCK_TCPIP_CORE();
     tcp_arg(socket->pcb, socket);
     tcp_recv(socket->pcb, nplwip_tcp_recv_callback);
+    tcp_err(socket->pcb, nplwip_tcp_err_callback);
     UNLOCK_TCPIP_CORE();
 
     socket->connect_ce = NULL;
@@ -118,6 +131,7 @@ static np_error_code nplwip_tcp_create(struct np_tcp *obj, struct np_tcp_socket 
 
 static void nplwip_tcp_abort(struct np_tcp_socket *socket)
 {
+    NABTO_LOG_TRACE(TCP_LOG, "nplwip_tcp_abort");
     LOCK_TCPIP_CORE();
     tcp_abort(socket->pcb);
     UNLOCK_TCPIP_CORE();
@@ -125,8 +139,8 @@ static void nplwip_tcp_abort(struct np_tcp_socket *socket)
 
 static void nplwip_tcp_destroy(struct np_tcp_socket *socket)
 {
-    if (socket == NULL)
-    {
+    NABTO_LOG_TRACE(TCP_LOG, "nplwip_tcp_destroy");
+    if (socket == NULL) {
         NABTO_LOG_ERROR(TCP_LOG, "TCP socket destroyed twice.");
         return;
     }
@@ -137,28 +151,31 @@ static void nplwip_tcp_destroy(struct np_tcp_socket *socket)
     tcp_recv(socket->pcb, NULL);
     err_t error = tcp_close(socket->pcb);
     UNLOCK_TCPIP_CORE();
-    if (error == ERR_MEM)
-    {
-        NABTO_LOG_ERROR(TCP_LOG, "lwIP failed to close TCP socket due to lack of memory.")
-        // @TODO: We need to wait and try to close again in the acknowledgement callback.
+    if (error == ERR_MEM) {
+        NABTO_LOG_ERROR(
+            TCP_LOG, "lwIP failed to close TCP socket due to lack of memory.")
+        // @TODO: We need to wait and try to close again in the acknowledgement
+        // callback.
     }
 
     free(socket);
 }
 
-static void nplwip_tcp_async_connect(struct np_tcp_socket *socket, struct np_ip_address *addr, uint16_t port,
-                                     struct np_completion_event *completion_event)
+static void nplwip_tcp_async_connect(
+    struct np_tcp_socket *socket, struct np_ip_address *addr, uint16_t port,
+    struct np_completion_event *completion_event)
 {
+    NABTO_LOG_TRACE(TCP_LOG, "nplwip_tcp_async_connect");
     ip_addr_t ip;
     nplwip_convertip_np_to_lwip(addr, &ip);
 
     socket->connect_ce = completion_event;
 
     LOCK_TCPIP_CORE();
-    err_t error = tcp_connect(socket->pcb, &ip, port, nplwip_tcp_connected_callback);
+    err_t error =
+        tcp_connect(socket->pcb, &ip, port, nplwip_tcp_connected_callback);
     UNLOCK_TCPIP_CORE();
-    if (error != ERR_OK)
-    {
+    if (error != ERR_OK) {
         np_error_code ec = NABTO_EC_UNKNOWN;
         if (error == ERR_MEM) {
             ec = NABTO_EC_OUT_OF_MEMORY;
@@ -168,18 +185,19 @@ static void nplwip_tcp_async_connect(struct np_tcp_socket *socket, struct np_ip_
     }
 }
 
-// @TODO: Currently calling tcp_output to flush out data immediately for simplicity.
-// This may not be optimal (see lwip docs).
-static void nplwip_tcp_async_write(struct np_tcp_socket *socket, const void *data, size_t data_len,
+// @TODO: Currently calling tcp_output to flush out data immediately for
+// simplicity. This may not be optimal (see lwip docs).
+static void nplwip_tcp_async_write(struct np_tcp_socket *socket,
+                                   const void *data, size_t data_len,
                                    struct np_completion_event *completion_event)
 {
+    NABTO_LOG_TRACE(TCP_LOG, "nplwip_tcp_async_write");
     err_t error;
 
     LOCK_TCPIP_CORE();
     error = tcp_write(socket->pcb, data, data_len, 0);
     UNLOCK_TCPIP_CORE();
-    if (error != ERR_OK)
-    {
+    if (error != ERR_OK) {
         NABTO_LOG_ERROR(TCP_LOG, "tcp_write failed, lwIP error: %i", error);
         np_completion_event_resolve(completion_event, NABTO_EC_UNKNOWN);
         return;
@@ -188,8 +206,7 @@ static void nplwip_tcp_async_write(struct np_tcp_socket *socket, const void *dat
     LOCK_TCPIP_CORE();
     error = tcp_output(socket->pcb);
     UNLOCK_TCPIP_CORE();
-    if (error != ERR_OK)
-    {
+    if (error != ERR_OK) {
         NABTO_LOG_ERROR(TCP_LOG, "tcp_output failed, lwIP error: %i", error);
         np_completion_event_resolve(completion_event, NABTO_EC_UNKNOWN);
         return;
@@ -198,11 +215,14 @@ static void nplwip_tcp_async_write(struct np_tcp_socket *socket, const void *dat
     np_completion_event_resolve(completion_event, NABTO_EC_OK);
 }
 
-static void nplwip_tcp_async_read(struct np_tcp_socket *socket, void *buffer, size_t buffer_len, size_t *read_len,
+static void nplwip_tcp_async_read(struct np_tcp_socket *socket, void *buffer,
+                                  size_t buffer_len, size_t *read_len,
                                   struct np_completion_event *completionEvent)
 {
+    NABTO_LOG_TRACE(TCP_LOG, "nplwip_tcp_async_read");
     if (socket->readCompletionEvent != NULL) {
-        np_completion_event_resolve(completionEvent, NABTO_EC_OPERATION_IN_PROGRESS);
+        np_completion_event_resolve(completionEvent,
+                                    NABTO_EC_OPERATION_IN_PROGRESS);
         return;
     }
 
@@ -218,46 +238,63 @@ static void nplwip_tcp_async_read(struct np_tcp_socket *socket, void *buffer, si
 
 static void nplwip_tcp_shutdown(struct np_tcp_socket *socket)
 {
+    NABTO_LOG_TRACE(TCP_LOG, "nplwip_tcp_shutdown");
     LOCK_TCPIP_CORE();
     err_t error = tcp_shutdown(socket->pcb, 0, 1);
     UNLOCK_TCPIP_CORE();
-    if (error != ERR_OK)
-    {
+    if (error != ERR_OK) {
         NABTO_LOG_ERROR(TCP_LOG, "TCP socket shutdown failed for some reason.");
     }
 }
 
-static void try_read(struct np_tcp_socket* socket)
+static void try_read(struct np_tcp_socket *socket)
 {
-    if (socket->inBuffer == NULL) {
-        return;
-    }
     if (socket->readCompletionEvent == NULL) {
         return;
     }
-
-    uint16_t headInBufferMissingLength = socket->inBuffer->len - socket->inBufferOffset;
-
-    if (socket->readBufferLength < headInBufferMissingLength) {
-        memcpy(socket->readBuffer, socket->inBuffer->payload + socket->inBufferOffset, socket->readBufferLength);
-        *(socket->readLength) = socket->readBufferLength;
-        socket->inBufferOffset += socket->readBufferLength;
-    } else {
-        uint16_t readLength = socket->inBuffer->len - socket->inBufferOffset;
-        memcpy(socket->readBuffer, socket->inBuffer->payload + socket->inBufferOffset, readLength);
-        *socket->readLength = readLength;
-        socket->inBufferOffset = 0;
-        struct pbuf* oldHead = socket->inBuffer;
-        socket->inBuffer = socket->inBuffer->next;
-        socket->inBufferOffset = 0;
-        pbuf_free(oldHead);
+    if (socket->inBuffer == NULL && socket->remoteClosed == false && socket->aborted == false) {
+        return;
     }
 
-    LOCK_TCPIP_CORE();
-    tcp_recved(socket->pcb, *socket->readLength);
-    UNLOCK_TCPIP_CORE();
+    np_error_code ec;
 
-    np_completion_event_resolve(socket->readCompletionEvent, NABTO_EC_OK);
+    if (socket->inBuffer != NULL) {
+        // return data
+        uint16_t headInBufferMissingLength =
+            socket->inBuffer->len - socket->inBufferOffset;
+
+        if (socket->readBufferLength < headInBufferMissingLength) {
+            memcpy(socket->readBuffer,
+                   socket->inBuffer->payload + socket->inBufferOffset,
+                   socket->readBufferLength);
+            *(socket->readLength) = socket->readBufferLength;
+            socket->inBufferOffset += socket->readBufferLength;
+        } else {
+            uint16_t readLength =
+                socket->inBuffer->len - socket->inBufferOffset;
+            memcpy(socket->readBuffer,
+                   socket->inBuffer->payload + socket->inBufferOffset,
+                   readLength);
+            *socket->readLength = readLength;
+            socket->inBufferOffset = 0;
+            struct pbuf *oldHead = socket->inBuffer;
+            socket->inBuffer = socket->inBuffer->next;
+            socket->inBufferOffset = 0;
+            pbuf_free(oldHead);
+        }
+
+        LOCK_TCPIP_CORE();
+        tcp_recved(socket->pcb, *socket->readLength);
+        UNLOCK_TCPIP_CORE();
+
+        ec = NABTO_EC_OK;
+    } else if (socket->aborted) {
+        ec = NABTO_EC_ABORTED;
+    } else if (socket->remoteClosed) {
+        ec = NABTO_EC_EOF;
+    }
+    NABTO_LOG_TRACE(TCP_LOG, "resolve tcp read with ec %s", np_error_code_to_string(ec));
+    np_completion_event_resolve(socket->readCompletionEvent, ec);
     socket->readCompletionEvent = NULL;
 }
 
@@ -268,8 +305,7 @@ static struct np_tcp_functions tcp_module = {
     .async_connect = nplwip_tcp_async_connect,
     .async_write = nplwip_tcp_async_write,
     .async_read = nplwip_tcp_async_read,
-    .shutdown = nplwip_tcp_shutdown
-};
+    .shutdown = nplwip_tcp_shutdown};
 
 struct np_tcp nplwip_get_tcp_impl()
 {
