@@ -57,6 +57,7 @@
 #include "lwip/ethip6.h"
 
 #include "netif/tapif.h"
+#include "netif/list.h"
 
 #include <signal.h>
 
@@ -65,6 +66,7 @@
 #include "task.h"
 
 #include <pthread.h>
+#include <utils/wait_for_event.h>
 
 #if defined(LWIP_UNIX_LINUX)
 #include <sys/ioctl.h>
@@ -101,17 +103,29 @@
 struct tapif {
   /* Add whatever per-interface state that is needed here. */
   int fd;
-  pthread_t isrThread;
+  pthread_t inThread;
+  pthread_t outThread;
+  struct list* inList;
+  struct list* outList;
   TaskHandle_t freeRTOSThread;
+  struct event* outEvent;
+};
 
-  QueueHandle_t incomingPackets;
+#define MAX_PACKET_LENGTH 1518
+
+struct packet {
+  uint8_t data[MAX_PACKET_LENGTH];
+  size_t dataLength;
 };
 
 /* Forward declarations. */
 static void tapif_input(struct netif *netif);
 
 static void freertos_thread(void *arg);
-static void* isr_thread(void* arg);
+static void* tapif_out_thread(void* arg);
+static void* tapif_in_thread(void* arg);
+
+static bool try_send_packet(struct tapif* tapif);
 
 /*-----------------------------------------------------------------------------------*/
 static void
@@ -173,11 +187,12 @@ low_level_init(struct netif *netif)
 
   // The start condition is that the task is blocked
 
-  // create a queue of buffer pointers
-  tapif->incomingPackets = xQueueCreate(100, sizeof(struct pbuf*));
+  tapif->inList = list_new(42);
+  tapif->outList = list_new(42);
+  tapif->outEvent = event_create();
 
-  pthread_t isrThread;
-  pthread_create(&tapif->isrThread, NULL, isr_thread, netif);
+  pthread_create(&tapif->inThread, NULL, tapif_in_thread, netif);
+  pthread_create(&tapif->outThread, NULL, tapif_out_thread, netif);
   if (xTaskCreate(freertos_thread, "freertos_tapif_thread", DEFAULT_THREAD_STACKSIZE,
                   netif, DEFAULT_THREAD_PRIO, &tapif->freeRTOSThread) != pdPASS)
   {
@@ -199,28 +214,19 @@ static err_t
 low_level_output(struct netif *netif, struct pbuf *p)
 {
   struct tapif *tapif = (struct tapif *)netif->state;
-  char buf[1518]; /* max packet size including VLAN excluding CRC */
-  ssize_t written;
 
-  if (p->tot_len > sizeof(buf)) {
-    MIB2_STATS_NETIF_INC(netif, ifoutdiscards);
-    perror("tapif: packet too large");
-    return ERR_IF;
-  }
+  struct packet* packet = malloc(sizeof(struct packet));
+  packet->dataLength = p->len;
+  memcpy(packet->data, p->payload, p->len);
+//  pbuf_free(p);
 
-  /* initiate transfer(); */
-  pbuf_copy_partial(p, buf, p->tot_len, 0);
-
-  /* signal that packet should be sent(); */
-  written = write(tapif->fd, buf, p->tot_len);
-  if (written < p->tot_len) {
-    MIB2_STATS_NETIF_INC(netif, ifoutdiscards);
-    perror("tapif: write");
-    return ERR_IF;
+  if (list_push(tapif->outList, packet) == 0) {
+    free(packet);
+    return ERR_MEM;
   } else {
-    MIB2_STATS_NETIF_ADD(netif, ifoutoctets, (u32_t)written);
-    return ERR_OK;
+    event_signal(tapif->outEvent);
   }
+  return ERR_OK;
 }
 /*-----------------------------------------------------------------------------------*/
 /*
@@ -231,10 +237,13 @@ low_level_output(struct netif *netif, struct pbuf *p)
  *
  */
 /*-----------------------------------------------------------------------------------*/
-static struct pbuf *
+static struct packet*
 low_level_input(struct netif *netif)
 {
-  struct pbuf *p;
+  struct packet *p = malloc(sizeof(struct packet));
+  if (p == NULL) {
+    return p;
+  }
   u16_t len;
   ssize_t readlen;
   char buf[1518]; /* max packet size including VLAN excluding CRC */
@@ -242,25 +251,13 @@ low_level_input(struct netif *netif)
 
   /* Obtain the size of the packet and put it into the "len"
      variable. */
-  readlen = read(tapif->fd, buf, sizeof(buf));
+  readlen = read(tapif->fd, p->data, MAX_PACKET_LENGTH);
   if (readlen < 0) {
     perror("read returned -1");
     exit(1);
   }
-  len = (u16_t)readlen;
 
-  MIB2_STATS_NETIF_ADD(netif, ifinoctets, len);
-
-  /* We allocate a pbuf chain of pbufs from the pool. */
-  p = pbuf_alloc(PBUF_RAW, len, PBUF_POOL);
-  if (p != NULL) {
-    pbuf_take(p, buf, len);
-    /* acknowledge that packet has been read(); */
-  } else {
-    /* drop packet(); */
-    MIB2_STATS_NETIF_INC(netif, ifindiscards);
-    LWIP_DEBUGF(NETIF_DEBUG, ("tapif_input: could not allocate pbuf\n"));
-  }
+  p->dataLength = (size_t)readlen;
 
   return p;
 }
@@ -279,22 +276,16 @@ low_level_input(struct netif *netif)
 static void
 tapif_input(struct netif *netif)
 {
-  struct pbuf *p = low_level_input(netif);
+  struct packet *p = low_level_input(netif);
   struct tapif *tapif = (struct tapif *)netif->state;
   if (p == NULL) {
-#if LINK_STATS
-    LINK_STATS_INC(link.recv);
-#endif /* LINK_STATS */
     LWIP_DEBUGF(TAPIF_DEBUG, ("tapif_input: low_level_input returned NULL\n"));
     return;
   }
 
-  BaseType_t xHigherPriorityTaskWoken;
-  BaseType_t result = xQueueSendFromISR( tapif->incomingPackets, &p, &xHigherPriorityTaskWoken );
-
-  if (result != pdTRUE) {
-    // queue full
-    pbuf_free(p);
+  if(list_push(tapif->inList, p) == 0) {
+    LWIP_DEBUGF(TAPIF_DEBUG, ("tapif_input: list is full\n"));
+    free(p);
   }
 
 }
@@ -349,26 +340,33 @@ freertos_thread(void *arg)
 
   while (1)
   {
-    struct pbuf *buf;
-    if (xQueueReceive(tapif->incomingPackets,
-                      &buf,
-                      portMAX_DELAY) == pdPASS)
-    {
-      if (netif->input(buf, netif) != ERR_OK)
+    struct packet* buf;
+
+    buf = list_pop(tapif->inList);
+    while(buf != NULL) {
+
+      struct pbuf* pbuf = pbuf_alloc(PBUF_RAW, buf->dataLength, PBUF_RAM);
+      pbuf_take(pbuf, buf->data, buf->dataLength);
+      free(buf);
+
+      if (netif->input(pbuf, netif) != ERR_OK)
       {
         LWIP_DEBUGF(NETIF_DEBUG, ("tapif_input: netif input error\n"));
-        pbuf_free(buf);
+        free(buf);
       }
+      buf = list_pop(tapif->inList);
     }
+    vTaskDelay(1 / portTICK_PERIOD_MS);
   }
 }
 
-static void *isr_thread(void *arg)
+static void *tapif_in_thread(void *arg)
 {
   sigset_t set;
-  sigfillset(&set);
 
-  pthread_sigmask(SIG_SETMASK, &set, NULL);
+  sigfillset( &set );
+  pthread_sigmask( SIG_SETMASK, &set, NULL );
+
   struct netif *netif;
   struct tapif *tapif;
   fd_set fdset;
@@ -379,24 +377,60 @@ static void *isr_thread(void *arg)
 
   while (1)
   {
-    sigset_t set;
-    sigfillset(&set);
-
-    pthread_sigmask(SIG_SETMASK, &set, NULL);
-
     FD_ZERO(&fdset);
     FD_SET(tapif->fd, &fdset);
 
     /* Wait for a packet to arrive. */
     ret = select(tapif->fd + 1, &fdset, NULL, NULL, NULL);
-
     if (ret == 1)
     {
       tapif_input(netif);
     }
     else if (ret == -1)
     {
-      perror("tapif_thread: select");
+      perror("tapif_in_thread: select");
     }
   }
+}
+
+static void *tapif_out_thread(void *arg)
+{
+  sigset_t set;
+
+  sigfillset( &set );
+  pthread_sigmask( SIG_SETMASK, &set, NULL );
+
+  struct netif *netif;
+  struct tapif *tapif;
+  fd_set fdset;
+  int ret;
+
+  netif = (struct netif *)arg;
+  tapif = (struct tapif *)netif->state;
+
+  while (1)
+  {
+    event_wait(tapif->outEvent);
+
+    bool ok = true;
+    while(ok) {
+      ok = try_send_packet(tapif);
+    }
+  }
+}
+
+bool try_send_packet(struct tapif* tapif)
+{
+  struct packet* p = list_pop(tapif->outList);
+  if (p == NULL) {
+    return false;
+  }
+  ssize_t written;
+
+  written = write(tapif->fd, p->data, p->dataLength);
+  free(p);
+  if (written < 0) {
+    perror("tapif: write");
+  }
+  return true;
 }
