@@ -18,7 +18,7 @@
 
 struct np_tcp_socket {
     struct tcp_pcb *pcb;
-    struct np_completion_event *connect_ce;
+    struct np_completion_event *connectCompletionEvent;
     struct np_completion_event *readCompletionEvent;
     void *readBuffer;
     size_t readBufferLength;
@@ -36,6 +36,7 @@ struct np_tcp_socket {
 
 static void nplwip_tcp_destroy(struct np_tcp_socket *socket);
 static void try_read(struct np_tcp_socket *socket);
+static void try_connect(struct np_tcp_socket *socket);
 
 static err_t nplwip_tcp_connected_callback(void *arg, struct tcp_pcb *tpcb,
                                            err_t err)
@@ -44,7 +45,9 @@ static err_t nplwip_tcp_connected_callback(void *arg, struct tcp_pcb *tpcb,
     UNUSED(tpcb);
     UNUSED(err);
     struct np_tcp_socket *socket = (struct np_tcp_socket *)arg;
-    np_completion_event_resolve(socket->connect_ce, NABTO_EC_OK);
+    try_connect(socket);
+    np_completion_event_resolve(socket->connectCompletionEvent, NABTO_EC_OK);
+
     return ERR_OK;
 }
 
@@ -61,6 +64,7 @@ static void nplwip_tcp_err_callback(void *arg, err_t err)
         NABTO_LOG_TRACE(TCP_LOG, "err %d", err);
     }
     try_read(socket);
+    try_connect(socket);
 }
 
 static err_t nplwip_tcp_recv_callback(void *arg, struct tcp_pcb *tpcb,
@@ -120,7 +124,7 @@ static np_error_code nplwip_tcp_create(struct np_tcp *obj,
     tcp_err(socket->pcb, nplwip_tcp_err_callback);
     UNLOCK_TCPIP_CORE();
 
-    socket->connect_ce = NULL;
+    socket->connectCompletionEvent = NULL;
     socket->inBuffer = NULL;
 
     // @TODO: Set an error callback with tcp_err()
@@ -169,7 +173,7 @@ static void nplwip_tcp_async_connect(
     ip_addr_t ip;
     nplwip_convertip_np_to_lwip(addr, &ip);
 
-    socket->connect_ce = completion_event;
+    socket->connectCompletionEvent = completion_event;
 
     LOCK_TCPIP_CORE();
     err_t error =
@@ -245,6 +249,19 @@ static void nplwip_tcp_shutdown(struct np_tcp_socket *socket)
     if (error != ERR_OK) {
         NABTO_LOG_ERROR(TCP_LOG, "TCP socket shutdown failed for some reason.");
     }
+}
+
+static void try_connect(struct np_tcp_socket* socket)
+{
+    if (socket->connectCompletionEvent == NULL) {
+        return;
+    }
+
+    np_error_code ec = NABTO_EC_OK;
+    if (socket->remoteClosed || socket->aborted) {
+        ec = NABTO_EC_ABORTED;
+    }
+    np_completion_event_resolve(socket->connectCompletionEvent, ec);
 }
 
 static void try_read(struct np_tcp_socket *socket)

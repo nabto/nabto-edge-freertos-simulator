@@ -8,11 +8,20 @@ option(DEVICE_BUILD_EXAMPLES "" OFF)
 option(DEVICE_BUILD_TESTS "" OFF)
 option(DEVICE_BUILD_APPS "" OFF)
 
+option(USE_TAPIF "Use a tapif for communication" ON)
+option(USE_PCAPIF "Use a pcap interface for communication" OFF)
+
+if (USE_TAPIF AND USE_PCAPIF)
+    message("USE_PCAPIF AND USE_TAPIF cannot be used at the same time.")
+elseif(NOT USE_TAPIF AND NOT USE_PCAPIF)
+    message("One of USE_PCAPIF and USE_TAPIF need to be enabled.")
+endif()
+
 set(KERNEL_DIR FreeRTOS/Kernel)
 set(LWIP_DIR lwip)
 set(NABTO_DIR nabto-embedded-sdk)
 
-add_subdirectory(${NABTO_DIR})
+add_subdirectory(${NABTO_DIR} EXCLUDE_FROM_ALL)
 
 include(${NABTO_DIR}/nabto_primary_files.cmake)
 #include(${LWIP_CONTRIB_DIR}/ports/CMakeCommon.cmake)
@@ -77,9 +86,16 @@ set(lwip_port_src
 )
 
 set(lwip_netif_src
+    lwip-port/netif/list.c
     lwip-port/netif/tapif.c
     lwip-port/netif/pcapif.c
 )
+
+if (USE_TAPIF)
+    add_definitions(-DUSE_TAPIF)
+elseif(USE_PCAPIF)
+    add_definitions(-DUSE_PCAPIF)
+endif()
 
 set(nabto_lwip_src
     src/nabto_lwip/nm_nabto_lwip.c
