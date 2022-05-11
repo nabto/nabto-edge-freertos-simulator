@@ -1,5 +1,6 @@
 #include <lwip/netif.h>
 #include <lwip/tcp.h>
+#include <lwip/tcpip.h>
 #include <nn/string_map.h>
 #include <nn/string_set.h>
 #include <platform/interfaces/np_tcp.h>
@@ -9,18 +10,19 @@
 #include <platform/np_types.h>
 #include <string.h>
 
-#include "common.h"
-#include "default_netif.h"
+//#include "common.h"
+//#include "default_netif.h"
 #include "nm_nabto_lwip.h"
 #include "nm_nabto_lwip_util.h"
 
 #define TCP_LOG NABTO_LOG_MODULE_TCP
+#define UNUSED(x) (void)(x)
 
 struct np_tcp_socket {
     struct tcp_pcb *pcb;
     struct np_completion_event *connectCompletionEvent;
     struct np_completion_event *readCompletionEvent;
-    void *readBuffer;
+    uint8_t* readBuffer;
     size_t readBufferLength;
     size_t *readLength;
     struct pbuf *inBuffer;  // pbuf or chain of pbufs with incoming tcp data.
@@ -58,7 +60,7 @@ static void nm_lwip_tcp_err_callback(void *arg, err_t err)
         NABTO_LOG_TRACE(TCP_LOG, "TCP RST");
         socket->aborted = true;
     } else if (err == ERR_ABRT) {
-        NABTO_LOG_TRACE(TCP_LOG, "TCP_ABRT")
+        NABTO_LOG_TRACE(TCP_LOG, "TCP_ABRT");
         socket->aborted = true;
     } else {
         NABTO_LOG_TRACE(TCP_LOG, "err %d", err);
@@ -157,7 +159,7 @@ static void nm_lwip_tcp_destroy(struct np_tcp_socket *socket)
     UNLOCK_TCPIP_CORE();
     if (error == ERR_MEM) {
         NABTO_LOG_ERROR(
-            TCP_LOG, "lwIP failed to close TCP socket due to lack of memory.")
+            TCP_LOG, "lwIP failed to close TCP socket due to lack of memory.");
         // @TODO: We need to wait and try to close again in the acknowledgement
         // callback.
     }
@@ -234,8 +236,6 @@ static void nm_lwip_tcp_async_read(struct np_tcp_socket *socket, void *buffer,
     socket->readBufferLength = buffer_len;
     socket->readLength = read_len;
     socket->readCompletionEvent = completionEvent;
-    struct pbuf *ptr;
-    size_t read = 0;
 
     try_read(socket);
 }
@@ -282,7 +282,7 @@ static void try_read(struct np_tcp_socket *socket)
 
         if (socket->readBufferLength < headInBufferMissingLength) {
             memcpy(socket->readBuffer,
-                   socket->inBuffer->payload + socket->inBufferOffset,
+                   (uint8_t*)(socket->inBuffer->payload) + socket->inBufferOffset,
                    socket->readBufferLength);
             *(socket->readLength) = socket->readBufferLength;
             socket->inBufferOffset += socket->readBufferLength;
@@ -290,7 +290,7 @@ static void try_read(struct np_tcp_socket *socket)
             uint16_t readLength =
                 socket->inBuffer->len - socket->inBufferOffset;
             memcpy(socket->readBuffer,
-                   socket->inBuffer->payload + socket->inBufferOffset,
+                   (uint8_t*)(socket->inBuffer->payload) + socket->inBufferOffset,
                    readLength);
             *socket->readLength = readLength;
             socket->inBufferOffset = 0;
