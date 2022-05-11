@@ -4,7 +4,7 @@
 #include <lwip/ip.h>
 #include <platform/np_ip_address.h>
 
-void nplwip_convertip_np_to_lwip(const struct np_ip_address *from, ip_addr_t *to);
-void nplwip_convertip_lwip_to_np(const ip_addr_t *from, struct np_ip_address *to);
+void nm_lwip_convertip_np_to_lwip(const struct np_ip_address *from, ip_addr_t *to);
+void nm_lwip_convertip_lwip_to_np(const ip_addr_t *from, struct np_ip_address *to);
 
 #endif

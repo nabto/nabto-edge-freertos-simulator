@@ -34,11 +34,11 @@ struct np_tcp_socket {
 // TCP
 // ---------------------
 
-static void nplwip_tcp_destroy(struct np_tcp_socket *socket);
+static void nm_lwip_tcp_destroy(struct np_tcp_socket *socket);
 static void try_read(struct np_tcp_socket *socket);
 static void try_connect(struct np_tcp_socket *socket);
 
-static err_t nplwip_tcp_connected_callback(void *arg, struct tcp_pcb *tpcb,
+static err_t nm_lwip_tcp_connected_callback(void *arg, struct tcp_pcb *tpcb,
                                            err_t err)
 {
     NABTO_LOG_TRACE(TCP_LOG, "TCP Connected");
@@ -51,7 +51,7 @@ static err_t nplwip_tcp_connected_callback(void *arg, struct tcp_pcb *tpcb,
     return ERR_OK;
 }
 
-static void nplwip_tcp_err_callback(void *arg, err_t err)
+static void nm_lwip_tcp_err_callback(void *arg, err_t err)
 {
     struct np_tcp_socket *socket = arg;
     if (err == ERR_RST) {
@@ -67,7 +67,7 @@ static void nplwip_tcp_err_callback(void *arg, err_t err)
     try_connect(socket);
 }
 
-static err_t nplwip_tcp_recv_callback(void *arg, struct tcp_pcb *tpcb,
+static err_t nm_lwip_tcp_recv_callback(void *arg, struct tcp_pcb *tpcb,
                                       struct pbuf *p, err_t err)
 {
     UNUSED(tpcb);
@@ -75,7 +75,7 @@ static err_t nplwip_tcp_recv_callback(void *arg, struct tcp_pcb *tpcb,
 
     if (p == NULL) {
         // If this function is called with NULL then the host has closed the
-        // connection. nplwip_tcp_destroy(socket);
+        // connection. nm_lwip_tcp_destroy(socket);
         socket->remoteClosed = true;
         return ERR_OK;
     }
@@ -100,7 +100,7 @@ static err_t nplwip_tcp_recv_callback(void *arg, struct tcp_pcb *tpcb,
     return ERR_OK;
 }
 
-static np_error_code nplwip_tcp_create(struct np_tcp *obj,
+static np_error_code nm_lwip_tcp_create(struct np_tcp *obj,
                                        struct np_tcp_socket **out_socket)
 {
     UNUSED(obj);
@@ -120,8 +120,8 @@ static np_error_code nplwip_tcp_create(struct np_tcp *obj,
 
     LOCK_TCPIP_CORE();
     tcp_arg(socket->pcb, socket);
-    tcp_recv(socket->pcb, nplwip_tcp_recv_callback);
-    tcp_err(socket->pcb, nplwip_tcp_err_callback);
+    tcp_recv(socket->pcb, nm_lwip_tcp_recv_callback);
+    tcp_err(socket->pcb, nm_lwip_tcp_err_callback);
     UNLOCK_TCPIP_CORE();
 
     socket->connectCompletionEvent = NULL;
@@ -133,17 +133,17 @@ static np_error_code nplwip_tcp_create(struct np_tcp *obj,
     return NABTO_EC_OK;
 }
 
-static void nplwip_tcp_abort(struct np_tcp_socket *socket)
+static void nm_lwip_tcp_abort(struct np_tcp_socket *socket)
 {
-    NABTO_LOG_TRACE(TCP_LOG, "nplwip_tcp_abort");
+    NABTO_LOG_TRACE(TCP_LOG, "nm_lwip_tcp_abort");
     LOCK_TCPIP_CORE();
     tcp_abort(socket->pcb);
     UNLOCK_TCPIP_CORE();
 }
 
-static void nplwip_tcp_destroy(struct np_tcp_socket *socket)
+static void nm_lwip_tcp_destroy(struct np_tcp_socket *socket)
 {
-    NABTO_LOG_TRACE(TCP_LOG, "nplwip_tcp_destroy");
+    NABTO_LOG_TRACE(TCP_LOG, "nm_lwip_tcp_destroy");
     if (socket == NULL) {
         NABTO_LOG_ERROR(TCP_LOG, "TCP socket destroyed twice.");
         return;
@@ -165,19 +165,19 @@ static void nplwip_tcp_destroy(struct np_tcp_socket *socket)
     free(socket);
 }
 
-static void nplwip_tcp_async_connect(
+static void nm_lwip_tcp_async_connect(
     struct np_tcp_socket *socket, struct np_ip_address *addr, uint16_t port,
     struct np_completion_event *completion_event)
 {
-    NABTO_LOG_TRACE(TCP_LOG, "nplwip_tcp_async_connect");
+    NABTO_LOG_TRACE(TCP_LOG, "nm_lwip_tcp_async_connect");
     ip_addr_t ip;
-    nplwip_convertip_np_to_lwip(addr, &ip);
+    nm_lwip_convertip_np_to_lwip(addr, &ip);
 
     socket->connectCompletionEvent = completion_event;
 
     LOCK_TCPIP_CORE();
     err_t error =
-        tcp_connect(socket->pcb, &ip, port, nplwip_tcp_connected_callback);
+        tcp_connect(socket->pcb, &ip, port, nm_lwip_tcp_connected_callback);
     UNLOCK_TCPIP_CORE();
     if (error != ERR_OK) {
         np_error_code ec = NABTO_EC_UNKNOWN;
@@ -191,11 +191,11 @@ static void nplwip_tcp_async_connect(
 
 // @TODO: Currently calling tcp_output to flush out data immediately for
 // simplicity. This may not be optimal (see lwip docs).
-static void nplwip_tcp_async_write(struct np_tcp_socket *socket,
+static void nm_lwip_tcp_async_write(struct np_tcp_socket *socket,
                                    const void *data, size_t data_len,
                                    struct np_completion_event *completion_event)
 {
-    NABTO_LOG_TRACE(TCP_LOG, "nplwip_tcp_async_write");
+    NABTO_LOG_TRACE(TCP_LOG, "nm_lwip_tcp_async_write");
     err_t error;
 
     LOCK_TCPIP_CORE();
@@ -219,11 +219,11 @@ static void nplwip_tcp_async_write(struct np_tcp_socket *socket,
     np_completion_event_resolve(completion_event, NABTO_EC_OK);
 }
 
-static void nplwip_tcp_async_read(struct np_tcp_socket *socket, void *buffer,
+static void nm_lwip_tcp_async_read(struct np_tcp_socket *socket, void *buffer,
                                   size_t buffer_len, size_t *read_len,
                                   struct np_completion_event *completionEvent)
 {
-    NABTO_LOG_TRACE(TCP_LOG, "nplwip_tcp_async_read");
+    NABTO_LOG_TRACE(TCP_LOG, "nm_lwip_tcp_async_read");
     if (socket->readCompletionEvent != NULL) {
         np_completion_event_resolve(completionEvent,
                                     NABTO_EC_OPERATION_IN_PROGRESS);
@@ -240,9 +240,9 @@ static void nplwip_tcp_async_read(struct np_tcp_socket *socket, void *buffer,
     try_read(socket);
 }
 
-static void nplwip_tcp_shutdown(struct np_tcp_socket *socket)
+static void nm_lwip_tcp_shutdown(struct np_tcp_socket *socket)
 {
-    NABTO_LOG_TRACE(TCP_LOG, "nplwip_tcp_shutdown");
+    NABTO_LOG_TRACE(TCP_LOG, "nm_lwip_tcp_shutdown");
     LOCK_TCPIP_CORE();
     err_t error = tcp_shutdown(socket->pcb, 0, 1);
     UNLOCK_TCPIP_CORE();
@@ -316,15 +316,15 @@ static void try_read(struct np_tcp_socket *socket)
 }
 
 static struct np_tcp_functions tcp_module = {
-    .create = nplwip_tcp_create,
-    .destroy = nplwip_tcp_destroy,
-    .abort = nplwip_tcp_abort,
-    .async_connect = nplwip_tcp_async_connect,
-    .async_write = nplwip_tcp_async_write,
-    .async_read = nplwip_tcp_async_read,
-    .shutdown = nplwip_tcp_shutdown};
+    .create = nm_lwip_tcp_create,
+    .destroy = nm_lwip_tcp_destroy,
+    .abort = nm_lwip_tcp_abort,
+    .async_connect = nm_lwip_tcp_async_connect,
+    .async_write = nm_lwip_tcp_async_write,
+    .async_read = nm_lwip_tcp_async_read,
+    .shutdown = nm_lwip_tcp_shutdown};
 
-struct np_tcp nplwip_get_tcp_impl()
+struct np_tcp nm_lwip_get_tcp_impl()
 {
     struct np_tcp obj;
     obj.mptr = &tcp_module;

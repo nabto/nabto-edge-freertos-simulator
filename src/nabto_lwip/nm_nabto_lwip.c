@@ -55,7 +55,7 @@ struct np_udp_socket
 // DNS
 // ---------------------
 
-static void nplwip_dns_resolve_callback(const char *name, const ip_addr_t *addr, void *arg)
+static void nm_lwip_dns_resolve_callback(const char *name, const ip_addr_t *addr, void *arg)
 {
     NABTO_LOG_INFO(DNS_LOG, "DNS resolved %s to %s", name, ipaddr_ntoa(addr));
     dns_resolve_event *event = (dns_resolve_event*)arg;
@@ -63,7 +63,7 @@ static void nplwip_dns_resolve_callback(const char *name, const ip_addr_t *addr,
     {
         // @TODO: Currently we only resolve to one ip, which might be incorrect.
         *event->ips_resolved = 1;
-        nplwip_convertip_lwip_to_np(addr, &event->ips[0]);
+        nm_lwip_convertip_lwip_to_np(addr, &event->ips[0]);
         np_completion_event_resolve(event->completion_event, NABTO_EC_OK);
     }
     else
@@ -72,7 +72,7 @@ static void nplwip_dns_resolve_callback(const char *name, const ip_addr_t *addr,
     }
 }
 
-static void nplwip_async_resolve(struct np_dns *obj, const char *host,
+static void nm_lwip_async_resolve(struct np_dns *obj, const char *host,
                                  struct np_ip_address *ips,
                                  size_t ips_size, size_t *ips_resolved,
                                  struct np_completion_event *completion_event,
@@ -90,7 +90,7 @@ static void nplwip_async_resolve(struct np_dns *obj, const char *host,
     LOCK_TCPIP_CORE();
     struct ip_addr resolved;
     err_t Error = dns_gethostbyname_addrtype(host, &resolved,
-                                             nplwip_dns_resolve_callback, event,
+                                             nm_lwip_dns_resolve_callback, event,
                                              dns_addrtype);
     UNLOCK_TCPIP_CORE();
 
@@ -101,7 +101,7 @@ static void nplwip_async_resolve(struct np_dns *obj, const char *host,
             NABTO_LOG_INFO(DNS_LOG, "DNS resolved %s to %s", host, ipaddr_ntoa(&resolved));
             free(event);
             *ips_resolved = 1;
-            nplwip_convertip_lwip_to_np(&resolved, &ips[0]);
+            nm_lwip_convertip_lwip_to_np(&resolved, &ips[0]);
             np_completion_event_resolve(completion_event, NABTO_EC_OK);
             break;
         }
@@ -119,27 +119,27 @@ static void nplwip_async_resolve(struct np_dns *obj, const char *host,
     }
 }
 
-static void nplwip_async_resolve_ipv4(struct np_dns *obj, const char *host,
+static void nm_lwip_async_resolve_ipv4(struct np_dns *obj, const char *host,
                                       struct np_ip_address *ips,
                                       size_t ips_size, size_t *ips_resolved,
                                       struct np_completion_event *completion_event)
 {
-    nplwip_async_resolve(obj, host, ips, ips_size, ips_resolved, completion_event, IPADDR_TYPE_V4);
+    nm_lwip_async_resolve(obj, host, ips, ips_size, ips_resolved, completion_event, IPADDR_TYPE_V4);
 }
 
-static void nplwip_async_resolve_ipv6(struct np_dns *obj, const char *host,
+static void nm_lwip_async_resolve_ipv6(struct np_dns *obj, const char *host,
                                       struct np_ip_address *ips,
                                       size_t ips_size, size_t *ips_resolved,
                                       struct np_completion_event *completion_event)
 {
-    nplwip_async_resolve(obj, host, ips, ips_size, ips_resolved, completion_event, IPADDR_TYPE_V6);
+    nm_lwip_async_resolve(obj, host, ips, ips_size, ips_resolved, completion_event, IPADDR_TYPE_V6);
 }
 
 // ---------------------
 // UDP
 // ---------------------
 
-static void nplwip_udp_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p,
+static void nm_lwip_udp_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p,
                                 const ip_addr_t *addr, u16_t port)
 {
     UNUSED(upcb);
@@ -148,7 +148,7 @@ static void nplwip_udp_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p,
     if (p != NULL && socket->packet == NULL)
     {
         socket->packet = p;
-        nplwip_convertip_lwip_to_np(addr, &socket->addr);
+        nm_lwip_convertip_lwip_to_np(addr, &socket->addr);
         socket->port = port;
     }
     else
@@ -164,7 +164,7 @@ static void nplwip_udp_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p,
     }
 }
 
-static np_error_code nplwip_create_socket(struct np_udp *obj, struct np_udp_socket **out_socket)
+static np_error_code nm_lwip_create_socket(struct np_udp *obj, struct np_udp_socket **out_socket)
 {
     UNUSED(obj);
 
@@ -192,12 +192,12 @@ static np_error_code nplwip_create_socket(struct np_udp *obj, struct np_udp_sock
     return NABTO_EC_OK;
 }
 
-static void nplwip_abort_socket(struct np_udp_socket *socket)
+static void nm_lwip_abort_socket(struct np_udp_socket *socket)
 {
     socket->aborted = true;
 }
 
-static void nplwip_destroy_socket(struct np_udp_socket *socket)
+static void nm_lwip_destroy_socket(struct np_udp_socket *socket)
 {
     if (socket == NULL)
     {
@@ -205,7 +205,7 @@ static void nplwip_destroy_socket(struct np_udp_socket *socket)
         return;
     }
 
-    nplwip_abort_socket(socket);
+    nm_lwip_abort_socket(socket);
 
     LOCK_TCPIP_CORE();
     udp_remove(socket->upcb);
@@ -213,7 +213,7 @@ static void nplwip_destroy_socket(struct np_udp_socket *socket)
     UNLOCK_TCPIP_CORE();
 }
 
-static void nplwip_async_bind_port(struct np_udp_socket *socket, uint16_t port,
+static void nm_lwip_async_bind_port(struct np_udp_socket *socket, uint16_t port,
                                    struct np_completion_event *completion_event)
 {
     np_error_code ec = NABTO_EC_OK;
@@ -229,7 +229,7 @@ static void nplwip_async_bind_port(struct np_udp_socket *socket, uint16_t port,
         err_t error = udp_bind(socket->upcb, IP4_ADDR_ANY, port);
         if (error == ERR_OK)
         {
-            udp_recv(socket->upcb, nplwip_udp_callback, socket);
+            udp_recv(socket->upcb, nm_lwip_udp_callback, socket);
         }
         else
         {
@@ -242,7 +242,7 @@ static void nplwip_async_bind_port(struct np_udp_socket *socket, uint16_t port,
     np_completion_event_resolve(completion_event, ec);
 }
 
-static np_error_code nplwip_async_sendto_ec(struct np_udp_socket *socket, struct np_udp_endpoint *ep,
+static np_error_code nm_lwip_async_sendto_ec(struct np_udp_socket *socket, struct np_udp_endpoint *ep,
                                    uint8_t *buffer, uint16_t buffer_size)
 {
     np_error_code ec = NABTO_EC_OK;
@@ -260,7 +260,7 @@ static np_error_code nplwip_async_sendto_ec(struct np_udp_socket *socket, struct
     memcpy(packet->payload, buffer, buffer_size);
 
     ip_addr_t ip;
-    nplwip_convertip_np_to_lwip(&ep->ip, &ip);
+    nm_lwip_convertip_np_to_lwip(&ep->ip, &ip);
 
     LOCK_TCPIP_CORE();
     err_t lwip_err = udp_sendto(socket->upcb, packet, &ip, ep->port);
@@ -280,16 +280,16 @@ static np_error_code nplwip_async_sendto_ec(struct np_udp_socket *socket, struct
     return NABTO_EC_OK;
 }
 
-static void nplwip_async_sendto(struct np_udp_socket *socket, struct np_udp_endpoint *ep,
+static void nm_lwip_async_sendto(struct np_udp_socket *socket, struct np_udp_endpoint *ep,
                                 uint8_t *buffer, uint16_t buffer_size,
                                 struct np_completion_event *completion_event)
 {
     UNUSED(completion_event);
-    np_error_code ec = nplwip_async_sendto_ec(socket, ep, buffer, buffer_size);
+    np_error_code ec = nm_lwip_async_sendto_ec(socket, ep, buffer, buffer_size);
     np_completion_event_resolve(completion_event, ec);
 }
 
-static void nplwip_async_recv_wait(struct np_udp_socket *socket, struct np_completion_event *completion_event)
+static void nm_lwip_async_recv_wait(struct np_udp_socket *socket, struct np_completion_event *completion_event)
 {
     if (socket->aborted)
     {
@@ -308,7 +308,7 @@ static void nplwip_async_recv_wait(struct np_udp_socket *socket, struct np_compl
     }
 }
 
-static np_error_code nplwip_recv_from(struct np_udp_socket *socket, struct np_udp_endpoint *ep,
+static np_error_code nm_lwip_recv_from(struct np_udp_socket *socket, struct np_udp_endpoint *ep,
                                       uint8_t *buffer, size_t buffer_size, size_t *recv_size)
 {
     if (socket->aborted)
@@ -345,7 +345,7 @@ static np_error_code nplwip_recv_from(struct np_udp_socket *socket, struct np_ud
     }
 }
 
-static uint16_t nplwip_get_local_port(struct np_udp_socket *socket)
+static uint16_t nm_lwip_get_local_port(struct np_udp_socket *socket)
 {
     return socket->upcb->local_port;
 }
@@ -354,7 +354,7 @@ static uint16_t nplwip_get_local_port(struct np_udp_socket *socket)
 // Local IP
 // ---------------------
 
-static size_t nplwip_get_local_ips(struct np_local_ip *obj, struct np_ip_address *addrs, size_t addrs_size)
+static size_t nm_lwip_get_local_ips(struct np_local_ip *obj, struct np_ip_address *addrs, size_t addrs_size)
 {
     UNUSED(obj);
 
@@ -363,7 +363,7 @@ static size_t nplwip_get_local_ips(struct np_local_ip *obj, struct np_ip_address
         struct netif *netif = get_default_netif();
         const ip_addr_t *ip = netif_ip_addr4(netif);
         const ip_addr_t *ipv6 = netif_ip_addr6(netif, 0);
-        nplwip_convertip_lwip_to_np(ip, addrs);
+        nm_lwip_convertip_lwip_to_np(ip, addrs);
         return 1;
     }
     else
@@ -378,26 +378,26 @@ static size_t nplwip_get_local_ips(struct np_local_ip *obj, struct np_ip_address
 // ---------------------
 
 static struct np_dns_functions dns_module = {
-    .async_resolve_v4 = nplwip_async_resolve_ipv4,
-    .async_resolve_v6 = nplwip_async_resolve_ipv6
+    .async_resolve_v4 = nm_lwip_async_resolve_ipv4,
+    .async_resolve_v6 = nm_lwip_async_resolve_ipv6
 };
 
 static struct np_udp_functions udp_module = {
-    .create = nplwip_create_socket,
-    .destroy = nplwip_destroy_socket,
-    .abort = nplwip_abort_socket,
-    .async_bind_port = nplwip_async_bind_port,
-    .async_send_to = nplwip_async_sendto,
-    .async_recv_wait = nplwip_async_recv_wait,
-    .recv_from = nplwip_recv_from,
-    .get_local_port = nplwip_get_local_port
+    .create = nm_lwip_create_socket,
+    .destroy = nm_lwip_destroy_socket,
+    .abort = nm_lwip_abort_socket,
+    .async_bind_port = nm_lwip_async_bind_port,
+    .async_send_to = nm_lwip_async_sendto,
+    .async_recv_wait = nm_lwip_async_recv_wait,
+    .recv_from = nm_lwip_recv_from,
+    .get_local_port = nm_lwip_get_local_port
 };
 
 static struct np_local_ip_functions local_ip_module = {
-    .get_local_ips = nplwip_get_local_ips
+    .get_local_ips = nm_lwip_get_local_ips
 };
 
-struct np_dns nplwip_get_dns_impl()
+struct np_dns nm_lwip_get_dns_impl()
 {
     struct np_dns obj;
     obj.mptr = &dns_module;
@@ -405,7 +405,7 @@ struct np_dns nplwip_get_dns_impl()
     return obj;
 }
 
-struct np_udp nplwip_get_udp_impl()
+struct np_udp nm_lwip_get_udp_impl()
 {
     struct np_udp obj;
     obj.mptr = &udp_module;
@@ -413,7 +413,7 @@ struct np_udp nplwip_get_udp_impl()
     return obj;
 }
 
-struct np_local_ip nplwip_get_local_ip_impl()
+struct np_local_ip nm_lwip_get_local_ip_impl()
 {
     struct np_local_ip obj;
     obj.mptr = &local_ip_module;

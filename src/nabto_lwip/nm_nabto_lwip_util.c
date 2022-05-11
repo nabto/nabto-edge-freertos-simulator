@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-void nplwip_convertip_np_to_lwip(const struct np_ip_address *from, ip_addr_t *to)
+void nm_lwip_convertip_np_to_lwip(const struct np_ip_address *from, ip_addr_t *to)
 {
     memset(to, 0, sizeof(*to));
     if (from->type == NABTO_IPV4)
@@ -17,7 +17,7 @@ void nplwip_convertip_np_to_lwip(const struct np_ip_address *from, ip_addr_t *to
     }
 }
 
-void nplwip_convertip_lwip_to_np(const ip_addr_t *from, struct np_ip_address *to)
+void nm_lwip_convertip_lwip_to_np(const ip_addr_t *from, struct np_ip_address *to)
 {
     memset(to, 0, sizeof(*to));
     if (from->type == IPADDR_TYPE_V4)
