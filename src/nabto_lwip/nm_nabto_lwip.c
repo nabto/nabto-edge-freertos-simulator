@@ -356,11 +356,9 @@ static uint16_t nm_lwip_get_local_port(struct np_udp_socket *socket)
 
 static size_t nm_lwip_get_local_ips(struct np_local_ip *obj, struct np_ip_address *addrs, size_t addrs_size)
 {
-    UNUSED(obj);
-
     if (addrs_size > 1)
     {
-        struct netif *netif = get_default_netif();
+        struct netif *netif = (struct netif*)(obj->data);
         const ip_addr_t *ip = netif_ip_addr4(netif);
         const ip_addr_t *ipv6 = netif_ip_addr6(netif, 0);
         nm_lwip_convertip_lwip_to_np(ip, addrs);
@@ -413,10 +411,10 @@ struct np_udp nm_lwip_get_udp_impl()
     return obj;
 }
 
-struct np_local_ip nm_lwip_get_local_ip_impl()
+struct np_local_ip nm_lwip_get_local_ip_impl(struct netif* netif)
 {
     struct np_local_ip obj;
     obj.mptr = &local_ip_module;
-    obj.data = NULL;
+    obj.data = netif;
     return obj;
 }

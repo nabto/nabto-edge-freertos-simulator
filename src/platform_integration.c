@@ -38,7 +38,7 @@ np_error_code nabto_device_platform_init(struct nabto_device_context *device,
     struct np_dns dns = nm_lwip_get_dns_impl();
     struct np_udp udp = nm_lwip_get_udp_impl();
     struct np_tcp tcp = nm_lwip_get_tcp_impl();
-    struct np_local_ip localip = nm_lwip_get_local_ip_impl();
+    struct np_local_ip localip = nm_lwip_get_local_ip_impl(get_default_netif());
 
     thread_event_queue_init(&platform->event_queue, mutex, &ts);
     thread_event_queue_run(&platform->event_queue);
