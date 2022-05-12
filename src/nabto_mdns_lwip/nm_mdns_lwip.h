@@ -21,7 +21,7 @@ struct nm_mdns_lwip {
     struct udp_pcb *socket;
     struct nn_llist netifList;
     struct nabto_mdns_server_context mdnsServer;
-    struct nabto_mdns_ip_address localIps[NM_MDNS_LWIP_MAX_LOCAL_IPS];
+    struct nn_ip_address localIps[NM_MDNS_LWIP_MAX_LOCAL_IPS];
     size_t localIpsSize;
     struct np_local_ip localIp;
     uint16_t port;

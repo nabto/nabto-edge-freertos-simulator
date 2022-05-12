@@ -125,6 +125,7 @@ target_include_directories(nabto_freertos_lwip_simulator SYSTEM PRIVATE ${ne_pri
 target_include_directories(nabto_freertos_lwip_simulator SYSTEM PRIVATE ${NABTO_DIR})
 target_link_libraries(nabto_freertos_lwip_simulator pthread)
 target_compile_definitions(nabto_freertos_lwip_simulator PRIVATE -DMBEDTLS_CONFIG_FILE=<nabto_mbedtls_config.h> ${LWIP_DEFINITIONS} ${LWIP_MBEDTLS_DEFINITIONS})
+target_compile_definitions(nabto_freertos_lwip_simulator PRIVATE -DNABTO_DEVICE_LOG_STD_OUT_CALLBACK=0)
 
 add_dependencies(nabto_freertos_lwip_simulator GENERATE_VERSION)
 
