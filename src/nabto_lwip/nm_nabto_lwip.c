@@ -10,6 +10,7 @@
 #include <lwip/tcp.h>
 #include <lwip/netif.h>
 #include <lwip/apps/mdns.h>
+#include <lwip/tcpip.h>
 
 #include <platform/interfaces/np_dns.h>
 #include <platform/interfaces/np_udp.h>
@@ -24,13 +25,15 @@
 #include <nn/string_set.h>
 #include <nn/string_map.h>
 
-#include "common.h"
-#include "default_netif.h"
+//#include "common.h"
+//#include "default_netif.h"
 
 #define DNS_LOG  NABTO_LOG_MODULE_DNS
 #define UDP_LOG  NABTO_LOG_MODULE_UDP
 #define TCP_LOG  NABTO_LOG_MODULE_TCP
 #define MDNS_LOG NABTO_LOG_MODULE_MDNS
+
+#define UNUSED(x) (void)(x)
 
 typedef struct
 {
