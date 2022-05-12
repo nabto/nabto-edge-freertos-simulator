@@ -7,6 +7,7 @@
 #include <lwip/ip_addr.h>
 #include <lwip/prot/dns.h>
 #include <lwip/udp.h>
+#include <lwip/tcpip.h>
 
 #if LWIP_IPV4
 #include "lwip/igmp.h"
