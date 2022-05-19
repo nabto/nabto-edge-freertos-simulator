@@ -2,6 +2,7 @@
 
 #include <platform/np_local_ip_wrapper.h>
 #include <platform/interfaces/np_mdns.h>
+#include <platform/np_allocator.h>
 
 #include <lwip/igmp.h>
 #include <lwip/ip_addr.h>
@@ -90,12 +91,12 @@ void nm_mdns_lwip_deinit(struct nm_mdns_lwip* ctx)
 void nm_mdns_lwip_add_netif(struct nm_mdns_lwip* ctx, struct netif* netif)
 {
     struct nn_llist_node* n =
-        (struct nn_llist_node*)calloc(1, sizeof(struct nn_llist_node));
+        (struct nn_llist_node*)np_calloc(1, sizeof(struct nn_llist_node));
 
     if (join_groups(netif) == NABTO_EC_OK) {
         nn_llist_append(&ctx->netifList, n, netif);
     } else {
-        free(n);
+        np_free(n);
     }
 }
 
@@ -108,7 +109,7 @@ void nm_mdns_lwip_remove_netif(struct nm_mdns_lwip* ctx, struct netif* netif)
         if (n == netif) {
             struct nn_llist_node* tmp = it.node;
             nn_llist_erase(&it);
-            free(tmp);
+            np_free(tmp);
 
             leave_groups(netif);
             return;

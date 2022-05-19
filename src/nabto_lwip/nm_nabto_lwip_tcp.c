@@ -8,6 +8,7 @@
 #include <platform/np_error_code.h>
 #include <platform/np_logging.h>
 #include <platform/np_types.h>
+#include <platform/np_allocator.h>
 #include <string.h>
 
 //#include "common.h"
@@ -106,7 +107,7 @@ static np_error_code nm_lwip_tcp_create(struct np_tcp *obj,
                                        struct np_tcp_socket **out_socket)
 {
     UNUSED(obj);
-    struct np_tcp_socket *socket = calloc(1, sizeof(struct np_tcp_socket));
+    struct np_tcp_socket *socket = np_calloc(1, sizeof(struct np_tcp_socket));
     if (socket == NULL) {
         return NABTO_EC_OUT_OF_MEMORY;
     }
@@ -116,7 +117,7 @@ static np_error_code nm_lwip_tcp_create(struct np_tcp *obj,
     UNLOCK_TCPIP_CORE();
 
     if (socket->pcb == NULL) {
-        free(socket);
+        np_free(socket);
         return NABTO_EC_OUT_OF_MEMORY;
     }
 
@@ -164,7 +165,7 @@ static void nm_lwip_tcp_destroy(struct np_tcp_socket *socket)
         // callback.
     }
 
-    free(socket);
+    np_free(socket);
 }
 
 static void nm_lwip_tcp_async_connect(

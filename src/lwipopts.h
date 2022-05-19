@@ -331,5 +331,4 @@ void sys_unlock_tcpip_core(void);
 #define TCPIP_THREAD_STACKSIZE 1024
 #define DEFAULT_THREAD_STACKSIZE 1024
 
-
 #endif /* LWIP_LWIPOPTS_H */

@@ -3,8 +3,6 @@
 
 #include <string.h>
 
-#include <FreeRTOS.h>
-
 #include <lwip/dns.h>
 #include <lwip/udp.h>
 #include <lwip/tcp.h>
@@ -21,6 +19,7 @@
 #include <platform/np_error_code.h>
 #include <platform/np_completion_event.h>
 #include <platform/np_logging.h>
+#include <platform/np_allocator.h>
 
 #include <nn/string_set.h>
 #include <nn/string_map.h>
@@ -82,7 +81,7 @@ static void nm_lwip_async_resolve(struct np_dns *obj, const char *host,
                                  int addr_type)
 {
     UNUSED(obj);
-    dns_resolve_event *event = calloc(1, sizeof(dns_resolve_event));
+    dns_resolve_event *event = np_calloc(1, sizeof(dns_resolve_event));
     event->ips_size = ips_size;
     event->ips_resolved = ips_resolved;
     event->ips = ips;
@@ -102,7 +101,7 @@ static void nm_lwip_async_resolve(struct np_dns *obj, const char *host,
         case ERR_OK:
         {
             NABTO_LOG_INFO(DNS_LOG, "DNS resolved %s to %s", host, ipaddr_ntoa(&resolved));
-            free(event);
+            np_free(event);
             *ips_resolved = 1;
             nm_lwip_convertip_lwip_to_np(&resolved, &ips[0]);
             np_completion_event_resolve(completion_event, NABTO_EC_OK);
@@ -171,7 +170,7 @@ static np_error_code nm_lwip_create_socket(struct np_udp *obj, struct np_udp_soc
 {
     UNUSED(obj);
 
-    struct np_udp_socket *socket = calloc(1, sizeof(struct np_udp_socket));
+    struct np_udp_socket *socket = np_calloc(1, sizeof(struct np_udp_socket));
     if (socket == NULL)
     {
         return NABTO_EC_OUT_OF_MEMORY;
@@ -181,7 +180,7 @@ static np_error_code nm_lwip_create_socket(struct np_udp *obj, struct np_udp_soc
     socket->upcb = udp_new_ip_type(IPADDR_TYPE_ANY);
     UNLOCK_TCPIP_CORE();
     if (socket->upcb == NULL) {
-        free(socket);
+        np_free(socket);
         return NABTO_EC_OUT_OF_MEMORY;
     }
 
@@ -212,7 +211,7 @@ static void nm_lwip_destroy_socket(struct np_udp_socket *socket)
 
     LOCK_TCPIP_CORE();
     udp_remove(socket->upcb);
-    free(socket);
+    np_free(socket);
     UNLOCK_TCPIP_CORE();
 }
 

@@ -43,6 +43,7 @@ set(port_src
     src/default_netif.c
     src/lwip_port_init.c
     src/nabto_mdns_lwip/nm_mdns_lwip.c
+    src/freertos_util/freertos_calloc.c
     )
 
 set(freertos_kernel_src
@@ -126,6 +127,7 @@ target_include_directories(nabto_freertos_lwip_simulator SYSTEM PRIVATE ${NABTO_
 target_link_libraries(nabto_freertos_lwip_simulator pthread)
 target_compile_definitions(nabto_freertos_lwip_simulator PRIVATE -DMBEDTLS_CONFIG_FILE=<nabto_mbedtls_config.h> ${LWIP_DEFINITIONS} ${LWIP_MBEDTLS_DEFINITIONS})
 target_compile_definitions(nabto_freertos_lwip_simulator PRIVATE -DNABTO_DEVICE_LOG_STD_OUT_CALLBACK=0)
+target_compile_definitions(nabto_freertos_lwip_simulator PUBLIC -DNP_CONFIG_FILE=<np_config_port.h>)
 
 add_dependencies(nabto_freertos_lwip_simulator GENERATE_VERSION)
 
